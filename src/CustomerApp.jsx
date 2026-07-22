@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { supabase } from "./supabaseClient.js";
+import { supabase, supabaseConfigError } from "./supabaseClient.js";
 import {
   Store,
   MessageCircle,
@@ -137,14 +137,26 @@ function PrimaryButton({ children, onClick, disabled, className = "" }) {
 }
 
 export default function CustomerApp() {
+  if (supabaseConfigError) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ ...body, background: "#FAF8F3" }}>
+        <div className="max-w-md text-center">
+          <p className="text-2xl mb-2" style={display}>Konfigurasi belum lengkap</p>
+          <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3">{supabaseConfigError}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <CustomerAppInner />;
+}
+
+function CustomerAppInner() {
   const [step, setStep] = useState(1);
   const [outlet, setOutlet] = useState(null);
   const [form, setForm] = useState({ name: "", pax: "", wa: "" });
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
-  const [otpInput, setOtpInput] = useState("");
-  const [otpSending, setOtpSending] = useState(false);
-  const [otpError, setOtpError] = useState("");
   const [monthIndex, setMonthIndex] = useState(new Date().getMonth());
   const [selectedDate, setSelectedDate] = useState(null);
   const [session, setSession] = useState(null);
@@ -234,44 +246,6 @@ export default function CustomerApp() {
     setStep((s) => Math.max(s - 1, 1));
   }
 
-  async function sendOtp() {
-    setOtpSending(true);
-    setOtpError("");
-    try {
-      const res = await fetch("/api/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ whatsapp: form.wa }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal mengirim OTP");
-      setOtpSent(true);
-    } catch (err) {
-      setOtpError(err.message);
-    } finally {
-      setOtpSending(false);
-    }
-  }
-
-  async function verifyOtp(code) {
-    setOtpError("");
-    try {
-      const res = await fetch("/api/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ whatsapp: form.wa, code }),
-      });
-      const data = await res.json();
-      if (!data.verified) {
-        setOtpError(data.error || "Kode salah");
-        return;
-      }
-      setOtpVerified(true);
-    } catch (err) {
-      setOtpError("Gagal verifikasi. Coba lagi.");
-    }
-  }
-
   function handlePickDate(d) {
     const status = dayStatus(monthIndex, d);
     setSelectedDate(d);
@@ -328,22 +302,6 @@ export default function CustomerApp() {
         if (paymentError) throw paymentError;
 
         setBookingCode(code);
-
-        // Kirim notifikasi WhatsApp berisi kode booking (tidak menggagalkan
-        // proses kalau ini gagal — reservasi tetap tersimpan di database)
-        fetch("/api/send-confirmation", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            whatsapp: form.wa,
-            name: form.name,
-            outlet: OUTLETS.find((o) => o.id === outlet)?.name,
-            date: `${selectedDate} ${MONTHS[monthIndex]} 2026`,
-            session,
-            bookingCode: code,
-          }),
-        }).catch((e) => console.error("Gagal kirim notifikasi WA:", e));
-
         setPaying(false);
         setPaid(true);
         setTimeout(goNext, 700);
@@ -424,27 +382,16 @@ export default function CustomerApp() {
               <label className="block text-xs font-semibold text-stone-600 mb-1.5">Nomor WhatsApp</label>
               <div className="flex gap-2 mb-2">
                 <input value={form.wa} onChange={(e) => setForm({ ...form, wa: e.target.value.replace(/\D/g, "") })} placeholder="0812xxxxxxxx" inputMode="numeric" className="flex-1 rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <button onClick={sendOtp} disabled={form.wa.length < 8 || otpSending} className={"px-3 rounded-lg text-xs font-semibold whitespace-nowrap " + (form.wa.length < 8 || otpSending ? "bg-stone-100 text-stone-400" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100")}>
-                  {otpSending ? "Mengirim..." : otpSent ? "Kirim ulang" : "Kirim OTP"}
+                <button onClick={() => setOtpSent(true)} disabled={form.wa.length < 8} className={"px-3 rounded-lg text-xs font-semibold whitespace-nowrap " + (form.wa.length < 8 ? "bg-stone-100 text-stone-400" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100")}>
+                  Kirim OTP
                 </button>
               </div>
               {otpSent && !otpVerified && (
                 <div className="mt-3 flex items-center gap-2">
-                  <input
-                    maxLength={4}
-                    value={otpInput}
-                    placeholder="Kode OTP"
-                    className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "");
-                      setOtpInput(val);
-                      if (val.length === 4) verifyOtp(val);
-                    }}
-                  />
+                  <input maxLength={4} placeholder="Kode OTP" className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-400" onChange={(e) => e.target.value.length === 4 && setOtpVerified(true)} />
                   <span className="text-[11px] text-stone-400 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> dikirim ke WhatsApp Anda</span>
                 </div>
               )}
-              {otpError && <p className="mt-2 text-xs text-rose-500">{otpError}</p>}
               {otpVerified && (
                 <p className="mt-3 text-xs text-emerald-700 flex items-center gap-1.5 font-medium"><ShieldCheck className="w-4 h-4" /> Nomor WhatsApp terverifikasi</p>
               )}

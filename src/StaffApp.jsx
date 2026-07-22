@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { supabase } from "./supabaseClient.js";
+import { supabase, supabaseConfigError } from "./supabaseClient.js";
 import {
   Moon,
   Star,
@@ -60,6 +60,20 @@ function StatCard({ label, value, sub, icon: Icon }) {
 }
 
 export default function StaffApp() {
+  if (supabaseConfigError) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ ...body, background: "#FAF8F3" }}>
+        <div className="max-w-md text-center">
+          <p className="text-2xl mb-2" style={display}>Konfigurasi belum lengkap</p>
+          <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3">{supabaseConfigError}</p>
+        </div>
+      </div>
+    );
+  }
+  return <StaffAppInner />;
+}
+
+function StaffAppInner() {
   const [isAuthed, setIsAuthed] = useState(() => {
     try {
       return sessionStorage.getItem("imperial_staff_authed") === "true";

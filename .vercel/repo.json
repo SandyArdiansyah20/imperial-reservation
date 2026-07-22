@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_MDMFTdGP4XvKTJMEYzNoiH4AKqox",
+      "name": "imperial-reservation",
+      "directory": ".",
+      "orgId": "team_7aPd3Zew6wvLVZtXaweCCTzH"
+    }
+  ]
+}
