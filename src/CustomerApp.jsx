@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { supabase } from "./supabaseClient.js";
 import {
   Store,
   MessageCircle,
@@ -53,13 +54,8 @@ const MONTHS = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
-function dayStatus(monthIndex, day) {
-  const dow = new Date(2026, monthIndex, day).getDay();
-  if (monthIndex === 2 && day >= 20) return "penuh";
-  if (monthIndex === 3 && day <= 10) return "penuh";
-  if (dow === 0 || dow === 6) return "terbatas";
-  return "tersedia";
-}
+const SESSIONS = ["17:30 — Buka Puasa", "19:00 — Malam"];
+const SESSION_CAPACITY = 15; // maksimal reservasi per sesi, sesuaikan dengan kapasitas outlet Anda
 
 function rupiah(n) {
   return "Rp" + n.toLocaleString("id-ID");
@@ -146,14 +142,79 @@ export default function CustomerApp() {
   const [form, setForm] = useState({ name: "", pax: "", wa: "" });
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
-  const [monthIndex, setMonthIndex] = useState(2); // start at Maret (Ramadan)
+  const [otpInput, setOtpInput] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [monthIndex, setMonthIndex] = useState(new Date().getMonth());
   const [selectedDate, setSelectedDate] = useState(null);
   const [session, setSession] = useState(null);
   const [menuQty, setMenuQty] = useState({});
   const [paymentMethod, setPaymentMethod] = useState(null); // 'qris' | 'cash'
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
-  const [bookingCode] = useState("IMR-" + Math.floor(1000 + Math.random() * 9000));
+  const [bookingCode, setBookingCode] = useState(null);
+  const [saveError, setSaveError] = useState("");
+
+  const [availability, setAvailability] = useState({}); // { "YYYY-MM-DD": { [session]: count } }
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+
+  const year = 2026;
+
+  // Ambil jumlah reservasi yang sudah ada untuk outlet & bulan yang sedang dilihat,
+  // supaya kalender bisa menandai tanggal/sesi yang sudah penuh berdasarkan data asli.
+  useEffect(() => {
+    if (!outlet || step !== 3) return;
+    let cancelled = false;
+    async function loadAvailability() {
+      setLoadingAvailability(true);
+      const start = `${year}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+      const end = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const { data, error } = await supabase
+        .from("reservations")
+        .select("reservation_date, session")
+        .eq("outlet_id", outlet)
+        .gte("reservation_date", start)
+        .lte("reservation_date", end)
+        .neq("status", "cancelled");
+
+      if (cancelled) return;
+      if (error) {
+        console.error(error);
+        setLoadingAvailability(false);
+        return;
+      }
+      const map = {};
+      (data || []).forEach((row) => {
+        const dateKey = row.reservation_date;
+        if (!map[dateKey]) map[dateKey] = {};
+        map[dateKey][row.session] = (map[dateKey][row.session] || 0) + 1;
+      });
+      setAvailability(map);
+      setLoadingAvailability(false);
+    }
+    loadAvailability();
+    return () => { cancelled = true; };
+  }, [outlet, monthIndex, step]);
+
+  function dateKeyOf(monthIdx, day) {
+    return `${year}-${String(monthIdx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function dayStatus(monthIdx, day) {
+    const counts = availability[dateKeyOf(monthIdx, day)] || {};
+    const total = SESSIONS.reduce((sum, s) => sum + (counts[s] || 0), 0);
+    const maxTotal = SESSION_CAPACITY * SESSIONS.length;
+    if (total >= maxTotal) return "penuh";
+    if (total >= maxTotal * 0.7) return "terbatas";
+    return "tersedia";
+  }
+
+  function sessionFull(monthIdx, day, s) {
+    const counts = availability[dateKeyOf(monthIdx, day)] || {};
+    return (counts[s] || 0) >= SESSION_CAPACITY;
+  }
 
   const total = useMemo(
     () => MENUS.reduce((sum, m) => sum + (menuQty[m.id] || 0) * m.price, 0),
@@ -173,6 +234,44 @@ export default function CustomerApp() {
     setStep((s) => Math.max(s - 1, 1));
   }
 
+  async function sendOtp() {
+    setOtpSending(true);
+    setOtpError("");
+    try {
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ whatsapp: form.wa }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengirim OTP");
+      setOtpSent(true);
+    } catch (err) {
+      setOtpError(err.message);
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function verifyOtp(code) {
+    setOtpError("");
+    try {
+      const res = await fetch("/api/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ whatsapp: form.wa, code }),
+      });
+      const data = await res.json();
+      if (!data.verified) {
+        setOtpError(data.error || "Kode salah");
+        return;
+      }
+      setOtpVerified(true);
+    } catch (err) {
+      setOtpError("Gagal verifikasi. Coba lagi.");
+    }
+  }
+
   function handlePickDate(d) {
     const status = dayStatus(monthIndex, d);
     setSelectedDate(d);
@@ -182,11 +281,78 @@ export default function CustomerApp() {
 
   function handlePay() {
     setPaying(true);
-    setTimeout(() => {
-      setPaying(false);
-      setPaid(true);
-      setTimeout(goNext, 700);
-    }, 1100);
+    setSaveError("");
+    (async () => {
+      try {
+        const code = "IMR-" + Math.floor(1000 + Math.random() * 9000);
+        const dateKey = dateKeyOf(monthIndex, selectedDate);
+
+        const { data: reservation, error: resError } = await supabase
+          .from("reservations")
+          .insert({
+            booking_code: code,
+            outlet_id: outlet,
+            customer_name: form.name,
+            customer_whatsapp: form.wa,
+            pax: Number(form.pax),
+            reservation_date: dateKey,
+            session: session,
+            status: "pending",
+            payment_method: paymentMethod,
+            payment_status: paymentMethod === "qris" ? "paid" : "unpaid",
+            total_amount: total,
+            paid_amount: paymentMethod === "qris" ? minPayment : 0,
+          })
+          .select()
+          .single();
+
+        if (resError) throw resError;
+
+        const items = MENUS.filter((m) => menuQty[m.id] > 0).map((m) => ({
+          reservation_id: reservation.id,
+          menu_id: m.id,
+          quantity: menuQty[m.id],
+          price_at_order: m.price,
+        }));
+        if (items.length > 0) {
+          const { error: itemsError } = await supabase.from("reservation_items").insert(items);
+          if (itemsError) throw itemsError;
+        }
+
+        const { error: paymentError } = await supabase.from("payments").insert({
+          reservation_id: reservation.id,
+          amount: minPayment,
+          method: paymentMethod,
+          status: paymentMethod === "qris" ? "success" : "pending",
+        });
+        if (paymentError) throw paymentError;
+
+        setBookingCode(code);
+
+        // Kirim notifikasi WhatsApp berisi kode booking (tidak menggagalkan
+        // proses kalau ini gagal — reservasi tetap tersimpan di database)
+        fetch("/api/send-confirmation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            whatsapp: form.wa,
+            name: form.name,
+            outlet: OUTLETS.find((o) => o.id === outlet)?.name,
+            date: `${selectedDate} ${MONTHS[monthIndex]} 2026`,
+            session,
+            bookingCode: code,
+          }),
+        }).catch((e) => console.error("Gagal kirim notifikasi WA:", e));
+
+        setPaying(false);
+        setPaid(true);
+        setTimeout(goNext, 700);
+      } catch (err) {
+        console.error(err);
+        setSaveError("Gagal menyimpan reservasi. Coba lagi ya — " + (err.message || ""));
+        setPaying(false);
+      }
+    })();
   }
 
   return (
@@ -258,16 +424,27 @@ export default function CustomerApp() {
               <label className="block text-xs font-semibold text-stone-600 mb-1.5">Nomor WhatsApp</label>
               <div className="flex gap-2 mb-2">
                 <input value={form.wa} onChange={(e) => setForm({ ...form, wa: e.target.value.replace(/\D/g, "") })} placeholder="0812xxxxxxxx" inputMode="numeric" className="flex-1 rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <button onClick={() => setOtpSent(true)} disabled={form.wa.length < 8} className={"px-3 rounded-lg text-xs font-semibold whitespace-nowrap " + (form.wa.length < 8 ? "bg-stone-100 text-stone-400" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100")}>
-                  Kirim OTP
+                <button onClick={sendOtp} disabled={form.wa.length < 8 || otpSending} className={"px-3 rounded-lg text-xs font-semibold whitespace-nowrap " + (form.wa.length < 8 || otpSending ? "bg-stone-100 text-stone-400" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100")}>
+                  {otpSending ? "Mengirim..." : otpSent ? "Kirim ulang" : "Kirim OTP"}
                 </button>
               </div>
               {otpSent && !otpVerified && (
                 <div className="mt-3 flex items-center gap-2">
-                  <input maxLength={4} placeholder="Kode OTP" className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-400" onChange={(e) => e.target.value.length === 4 && setOtpVerified(true)} />
+                  <input
+                    maxLength={4}
+                    value={otpInput}
+                    placeholder="Kode OTP"
+                    className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "");
+                      setOtpInput(val);
+                      if (val.length === 4) verifyOtp(val);
+                    }}
+                  />
                   <span className="text-[11px] text-stone-400 flex items-center gap-1"><MessageCircle className="w-3 h-3" /> dikirim ke WhatsApp Anda</span>
                 </div>
               )}
+              {otpError && <p className="mt-2 text-xs text-rose-500">{otpError}</p>}
               {otpVerified && (
                 <p className="mt-3 text-xs text-emerald-700 flex items-center gap-1.5 font-medium"><ShieldCheck className="w-4 h-4" /> Nomor WhatsApp terverifikasi</p>
               )}
@@ -283,7 +460,10 @@ export default function CustomerApp() {
           <div>
             <p className="text-xs tracking-[0.15em] text-amber-600 font-semibold mb-2" style={body}>LANGKAH 3</p>
             <h1 className="text-3xl text-emerald-950 mb-2" style={display}>Cek ketersediaan slot</h1>
-            <p className="text-stone-500 text-sm mb-6">Pilih tanggal dan sesi. Tanggal penuh akan otomatis ditandai.</p>
+            <p className="text-stone-500 text-sm mb-6">
+              Pilih tanggal dan sesi. Tanggal penuh akan otomatis ditandai.
+              {loadingAvailability && <span className="text-amber-600"> · Memuat ketersediaan...</span>}
+            </p>
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <button onClick={() => { setMonthIndex((m) => Math.max(0, m - 1)); setSelectedDate(null); }} className="w-8 h-8 rounded-full hover:bg-stone-100 flex items-center justify-center"><ChevronLeft className="w-4 h-4 text-stone-500" /></button>
@@ -326,9 +506,26 @@ export default function CustomerApp() {
               <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
                 <p className="text-sm text-emerald-800 flex items-center gap-2 mb-3 font-medium"><Check className="w-4 h-4" /> {selectedDate} {MONTHS[monthIndex]} 2026 masih tersedia</p>
                 <div className="flex gap-2 flex-wrap">
-                  {["17:30 — Buka Puasa", "19:00 — Malam"].map((s) => (
-                    <button key={s} onClick={() => setSession(s)} className={"text-xs px-3 py-2 rounded-full border font-medium transition-colors " + (session === s ? "bg-emerald-800 text-white border-emerald-800" : "bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50")}>{s}</button>
-                  ))}
+                  {SESSIONS.map((s) => {
+                    const full = sessionFull(monthIndex, selectedDate, s);
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => !full && setSession(s)}
+                        disabled={full}
+                        className={
+                          "text-xs px-3 py-2 rounded-full border font-medium transition-colors " +
+                          (full
+                            ? "bg-stone-50 text-stone-300 border-stone-200 cursor-not-allowed line-through"
+                            : session === s
+                            ? "bg-emerald-800 text-white border-emerald-800"
+                            : "bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50")
+                        }
+                      >
+                        {s}{full ? " · Penuh" : ""}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -397,6 +594,9 @@ export default function CustomerApp() {
 
               {!paymentMethod && (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">Pilih metode pembayaran di atas terlebih dahulu.</p>
+              )}
+              {saveError && (
+                <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-3">{saveError}</p>
               )}
               {paymentMethod === "qris" && (
                 <>
