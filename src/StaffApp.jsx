@@ -15,6 +15,7 @@ import {
   LogOut,
   CalendarDays,
   Trash2,
+  Home,
 } from "lucide-react";
 
 const FONT_IMPORT =
@@ -27,7 +28,7 @@ const body = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 // backend/API, bukan disimpan langsung di kode frontend seperti ini.
 const STAFF_ACCESS_CODE = "IMP2026";
 
-const OUTLETS = [
+const DEFAULT_OUTLETS = [
   { id: "kemang", name: "Imperial Kemang" },
   { id: "bsd", name: "Imperial BSD" },
   { id: "pik", name: "Imperial PIK" },
@@ -92,6 +93,33 @@ function StaffAppInner() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [outletFilter, setOutletFilter] = useState("all");
 
+  const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
+  const [outletsError, setOutletsError] = useState("");
+
+  // Ambil daftar outlet dari database yang sama dengan CustomerApp, supaya
+  // filter dropdown di staff ikut lengkap begitu ada outlet baru ditambahkan.
+  useEffect(() => {
+    if (!isAuthed) return;
+    let cancelled = false;
+    async function loadOutlets() {
+      const { data, error } = await supabase
+        .from("outlets")
+        .select("id, name, city")
+        .order("city", { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        console.error("Gagal memuat outlet:", error);
+        setOutletsError(error.message || "Gagal memuat outlet dari database.");
+      } else if (data && data.length > 0) {
+        setOutlets(data);
+        setOutletsError("");
+      }
+    }
+    loadOutlets();
+    return () => { cancelled = true; };
+  }, [isAuthed]);
+
+
   useEffect(() => {
     if (!isAuthed) return;
     let cancelled = false;
@@ -150,6 +178,15 @@ function StaffAppInner() {
     } catch {}
     setIsAuthed(false);
     setCodeInput("");
+  }
+
+  // Reset filter dashboard kembali ke kondisi awal (tanggal hari ini, tanpa
+  // pencarian/filter) tanpa perlu logout. Dipakai tombol "Kembali ke awal".
+  function resetDashboard() {
+    setDateFilter(todayISO());
+    setQuery("");
+    setStatusFilter("all");
+    setOutletFilter("all");
   }
 
   const filtered = useMemo(() => {
@@ -237,6 +274,12 @@ function StaffAppInner() {
           <p className="text-[11px] text-stone-400 text-center mt-4">
             Lupa kode akses? Hubungi manajer outlet Anda.
           </p>
+          <a
+            href="/"
+            className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-stone-400 hover:text-stone-600 underline underline-offset-2"
+          >
+            <Home className="w-3 h-3" /> Kembali ke halaman awal
+          </a>
         </div>
       </div>
     );
@@ -247,24 +290,32 @@ function StaffAppInner() {
       <style>{FONT_IMPORT}</style>
 
       <header className="bg-emerald-950 text-stone-50">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="relative w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center">
+        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center shrink-0">
               <Moon className="w-4 h-4 text-emerald-950" fill="currentColor" />
               <Star className="w-2.5 h-2.5 text-emerald-950 absolute -top-0.5 -right-0.5" fill="currentColor" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-lg leading-none" style={display}>Imperial Staff</p>
               <p className="text-[11px] text-emerald-300 tracking-wide">Dashboard reservasi hari ini</p>
             </div>
           </div>
           <p className="text-[11px] text-emerald-300 hidden sm:block">Ramadan &amp; Lebaran 2026</p>
-          <button
-            onClick={handleLogout}
-            className="text-[11px] text-emerald-300 hover:text-white flex items-center gap-1.5 border border-emerald-800 rounded-full px-3 py-1.5"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Keluar
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="/"
+              className="text-[11px] text-emerald-300 hover:text-white flex items-center gap-1.5 border border-emerald-800 rounded-full px-3 py-1.5"
+            >
+              <Home className="w-3.5 h-3.5" /> Kembali ke awal
+            </a>
+            <button
+              onClick={handleLogout}
+              className="text-[11px] text-emerald-300 hover:text-white flex items-center gap-1.5 border border-emerald-800 rounded-full px-3 py-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Keluar
+            </button>
+          </div>
         </div>
         <div
           className="h-1.5 w-full"
@@ -309,10 +360,18 @@ function StaffAppInner() {
             className="rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="all">Semua outlet</option>
-            {OUTLETS.map((o) => (
+            {outlets.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
+          {(dateFilter !== todayISO() || query || statusFilter !== "all" || outletFilter !== "all") && (
+            <button
+              onClick={resetDashboard}
+              className="text-xs font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50 hover:border-stone-300 transition-colors whitespace-nowrap"
+            >
+              Reset filter
+            </button>
+          )}
         </div>
 
         {loadingReservations && (
@@ -320,6 +379,11 @@ function StaffAppInner() {
         )}
         {fetchError && (
           <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-4">{fetchError}</p>
+        )}
+        {outletsError && (
+          <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-4">
+            Daftar outlet belum lengkap: {outletsError}
+          </p>
         )}
 
         <div className="flex items-center gap-2 mb-5">
@@ -361,7 +425,7 @@ function StaffAppInner() {
                       <span className="text-[11px] font-mono tracking-wide text-stone-400">{r.code}</span>
                     </div>
                     <p className="text-xs text-stone-500 truncate">
-                      {r.pax} orang · {OUTLETS.find((o) => o.id === r.outlet)?.name} · {r.session}
+                      {r.pax} orang · {outlets.find((o) => o.id === r.outlet)?.name || r.outlet} · {r.session}
                     </p>
                     <p className="text-[11px] text-stone-400">{r.menu}</p>
                   </div>
