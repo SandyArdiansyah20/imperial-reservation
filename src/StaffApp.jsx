@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Trash2,
   Home,
+  Download,
 } from "lucide-react";
 
 const FONT_IMPORT =
@@ -128,7 +129,9 @@ function StaffAppInner() {
       setFetchError("");
       const { data, error } = await supabase
         .from("reservations")
-        .select("id, booking_code, customer_name, pax, outlet_id, reservation_date, session, status, reservation_items(quantity, menus(name))")
+        .select(
+          "id, booking_code, customer_name, customer_whatsapp, pax, outlet_id, reservation_date, session, status, payment_method, payment_status, total_amount, paid_amount, reservation_items(quantity, menus(name))"
+        )
         .eq("reservation_date", dateFilter)
         .order("created_at", { ascending: true });
 
@@ -144,10 +147,16 @@ function StaffAppInner() {
           id: r.id,
           code: r.booking_code,
           name: r.customer_name,
+          wa: r.customer_whatsapp,
           pax: r.pax,
           outlet: r.outlet_id,
+          date: r.reservation_date,
           session: r.session,
           status: r.status,
+          paymentMethod: r.payment_method,
+          paymentStatus: r.payment_status,
+          totalAmount: r.total_amount,
+          paidAmount: r.paid_amount,
           menu: (r.reservation_items || [])
             .map((it) => `${it.menus?.name || "Menu"} ×${it.quantity}`)
             .join(", "),
@@ -187,6 +196,66 @@ function StaffAppInner() {
     setQuery("");
     setStatusFilter("all");
     setOutletFilter("all");
+  }
+
+  // Export data reservasi yang sedang tampil (sesuai filter tanggal/pencarian/status/outlet
+  // aktif) ke file CSV yang bisa langsung dibuka di Excel/Google Sheets.
+  function exportCSV() {
+    if (filtered.length === 0) return;
+
+    const headers = [
+      "Kode Booking",
+      "Nama",
+      "WhatsApp",
+      "Outlet",
+      "Tanggal",
+      "Sesi",
+      "Jumlah Tamu",
+      "Menu",
+      "Status Kehadiran",
+      "Metode Bayar",
+      "Status Bayar",
+      "Total (Rp)",
+      "Dibayar (Rp)",
+    ];
+
+    function escapeCSV(val) {
+      const s = val === null || val === undefined ? "" : String(val);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    const rows = filtered.map((r) => [
+      r.code,
+      r.name,
+      r.wa,
+      outlets.find((o) => o.id === r.outlet)?.name || r.outlet,
+      r.date,
+      r.session,
+      r.pax,
+      r.menu,
+      STATUS_META[r.status]?.label || r.status,
+      r.paymentMethod === "qris" ? "QRIS" : r.paymentMethod === "cash" ? "Tunai" : r.paymentMethod,
+      r.paymentStatus,
+      r.totalAmount,
+      r.paidAmount,
+    ]);
+
+    const csvContent =
+      [headers, ...rows].map((row) => row.map(escapeCSV).join(",")).join("\n");
+
+    // Tambahkan BOM supaya karakter (misal "×" di kolom menu) tampil benar saat dibuka di Excel
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reservasi-imperial-${dateFilter}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   const filtered = useMemo(() => {
@@ -386,7 +455,7 @@ function StaffAppInner() {
           </p>
         )}
 
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
           <Filter className="w-3.5 h-3.5 text-stone-400" />
           {["all", "pending", "checked-in", "no-show"].map((s) => (
             <button
@@ -402,6 +471,18 @@ function StaffAppInner() {
               {s === "all" ? "Semua" : STATUS_META[s].label}
             </button>
           ))}
+          <button
+            onClick={exportCSV}
+            disabled={filtered.length === 0}
+            className={
+              "ml-auto text-xs font-semibold px-4 py-1.5 rounded-full flex items-center gap-1.5 transition-colors " +
+              (filtered.length === 0
+                ? "bg-stone-100 text-stone-300 cursor-not-allowed"
+                : "bg-white border border-emerald-800 text-emerald-800 hover:bg-emerald-50")
+            }
+          >
+            <Download className="w-3.5 h-3.5" /> Export CSV ({filtered.length})
+          </button>
         </div>
 
         <div className="space-y-2.5">
