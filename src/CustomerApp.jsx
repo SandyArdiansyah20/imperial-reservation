@@ -315,6 +315,27 @@ function CustomerAppInner() {
     setStep((s) => Math.max(s - 1, 1));
   }
 
+  // Reset semua state form/booking dan kembali ke Langkah 1 (pilih outlet).
+  // Dipakai tombol "Booking lagi" / "Kembali ke tampilan awal" di halaman konfirmasi.
+  function resetBooking() {
+    setStep(1);
+    setOutlet(null);
+    setOutletQuery("");
+    setForm({ name: "", pax: "", wa: "" });
+    setOtpSent(false);
+    setOtpVerified(false);
+    setMonthIndex(new Date().getMonth());
+    setSelectedDate(null);
+    setSession(null);
+    setMenuQty({});
+    setPaymentMethod(null);
+    setPaying(false);
+    setPaid(false);
+    setBookingCode(null);
+    setSaveError("");
+    setAvailability({});
+  }
+
   function handlePickDate(d) {
     const status = dayStatus(monthIndex, d);
     setSelectedDate(d);
@@ -713,6 +734,14 @@ function CustomerAppInner() {
                 <p className="text-[11px] text-stone-400 mb-1">Kode booking</p>
                 <p className="text-2xl font-semibold tracking-[0.15em] text-emerald-900" style={display}>{bookingCode}</p>
               </Card>
+
+              <button
+                onClick={resetBooking}
+                className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold border border-emerald-800 text-emerald-800 hover:bg-emerald-50 transition-colors"
+                style={body}
+              >
+                <Store className="w-4 h-4" /> Kembali ke tampilan awal
+              </button>
             </div>
           </div>
         )}
