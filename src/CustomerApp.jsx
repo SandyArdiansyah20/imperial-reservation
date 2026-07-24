@@ -7,6 +7,8 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  MapPin,
   UtensilsCrossed,
   CreditCard,
   Ticket,
@@ -19,6 +21,7 @@ import {
   Star,
   Sparkles,
   Banknote,
+  Search,
 } from "lucide-react";
 
 const FONT_IMPORT =
@@ -27,7 +30,7 @@ const FONT_IMPORT =
 const display = { fontFamily: "'Fraunces', serif" };
 const body = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
-const OUTLETS = [
+const DEFAULT_OUTLETS = [
   { id: "kemang", name: "Imperial Kemang", city: "Jakarta Selatan" },
   { id: "bsd", name: "Imperial BSD", city: "Tangerang Selatan" },
   { id: "pik", name: "Imperial PIK", city: "Jakarta Utara" },
@@ -154,6 +157,11 @@ export default function CustomerApp() {
 function CustomerAppInner() {
   const [step, setStep] = useState(1);
   const [outlet, setOutlet] = useState(null);
+  const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
+  const [loadingOutlets, setLoadingOutlets] = useState(true);
+  const [outletsError, setOutletsError] = useState("");
+  const [outletQuery, setOutletQuery] = useState("");
+  const [expandedCities, setExpandedCities] = useState(() => new Set());
   const [form, setForm] = useState({ name: "", pax: "", wa: "" });
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
@@ -171,6 +179,67 @@ function CustomerAppInner() {
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   const year = 2026;
+
+  // Ambil daftar outlet dari database (bukan lagi hardcode), supaya menu ini
+  // otomatis ikut bertambah kalau outlet baru ditambahkan lewat Supabase.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOutlets() {
+      const { data, error } = await supabase
+        .from("outlets")
+        .select("id, name, city")
+        .order("city", { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        console.error("Gagal memuat outlet dari Supabase:", error);
+        setOutletsError(error.message || "Gagal memuat outlet dari database.");
+      } else if (data && data.length > 0) {
+        setOutlets(data);
+        setOutletsError("");
+      } else {
+        // Query berhasil tapi tabel kosong / tidak ada baris yang ke-return (kemungkinan diblokir RLS)
+        setOutletsError("Tabel outlets kosong atau tidak ada baris yang terbaca (cek RLS policy SELECT-nya).");
+      }
+      setLoadingOutlets(false);
+    }
+    loadOutlets();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredOutlets = useMemo(() => {
+    const q = outletQuery.trim().toLowerCase();
+    if (!q) return outlets;
+    return outlets.filter(
+      (o) => o.name.toLowerCase().includes(q) || o.city.toLowerCase().includes(q)
+    );
+  }, [outlets, outletQuery]);
+
+  // Kelompokkan outlet per kota supaya bisa ditampilkan sebagai accordion.
+  const outletsByCity = useMemo(() => {
+    const groups = {};
+    filteredOutlets.forEach((o) => {
+      if (!groups[o.city]) groups[o.city] = [];
+      groups[o.city].push(o);
+    });
+    return groups;
+  }, [filteredOutlets]);
+
+  const cityList = useMemo(() => Object.keys(outletsByCity).sort(), [outletsByCity]);
+
+  function toggleCity(city) {
+    setExpandedCities((prev) => {
+      const next = new Set(prev);
+      if (next.has(city)) next.delete(city);
+      else next.add(city);
+      return next;
+    });
+  }
+
+  const isSearching = outletQuery.trim().length > 0;
+
+  function outletName(id) {
+    return outlets.find((o) => o.id === id)?.name;
+  }
 
   // Ambil jumlah reservasi yang sudah ada untuk outlet & bulan yang sedang dilihat,
   // supaya kalender bisa menandai tanggal/sesi yang sudah penuh berdasarkan data asli.
@@ -350,19 +419,74 @@ function CustomerAppInner() {
           <div>
             <p className="text-xs tracking-[0.15em] text-amber-600 font-semibold mb-2" style={body}>LANGKAH 1</p>
             <h1 className="text-3xl text-emerald-950 mb-2" style={display}>Pilih outlet Anda</h1>
-            <p className="text-stone-500 text-sm mb-8">Tersedia untuk buka puasa bersama dan momen Idul Fitri.</p>
-            <div className="grid sm:grid-cols-3 gap-4">
-              {OUTLETS.map((o) => (
-                <button key={o.id} onClick={() => { setOutlet(o.id); goNext(); }} className="text-left">
-                  <Card className="p-5 h-full hover:border-emerald-800 hover:shadow-md transition-all">
-                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
-                      <Store className="w-5 h-5 text-emerald-800" />
-                    </div>
-                    <p className="font-semibold text-emerald-950 text-sm mb-0.5">{o.name}</p>
-                    <p className="text-xs text-stone-500">{o.city}</p>
-                  </Card>
-                </button>
-              ))}
+            <p className="text-stone-500 text-sm mb-5">Tersedia untuk buka puasa bersama dan momen Idul Fitri.</p>
+
+            <div className="relative mb-2">
+              <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                value={outletQuery}
+                onChange={(e) => setOutletQuery(e.target.value)}
+                placeholder="Cari nama outlet atau kota..."
+                className="w-full rounded-full border border-stone-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+            <p className="text-xs text-stone-400 mb-4">
+              {loadingOutlets ? "Memuat daftar outlet..." : `${filteredOutlets.length} outlet di ${cityList.length} kota`}
+            </p>
+
+            {outletsError && (
+              <div className="mb-4 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3">
+                <p className="text-sm text-rose-700 font-medium mb-0.5">Gagal memuat outlet dari database</p>
+                <p className="text-xs text-rose-600">{outletsError}</p>
+                <p className="text-xs text-rose-400 mt-1">Menampilkan outlet bawaan sementara. Cek tabel "outlets" dan RLS policy SELECT di Supabase.</p>
+              </div>
+            )}
+
+            <div className="max-h-[560px] overflow-y-auto pr-1 -mr-1">
+              {cityList.map((city) => {
+                const list = outletsByCity[city];
+                const isOpen = isSearching || expandedCities.has(city);
+                return (
+                  <div key={city} className="border border-stone-200 rounded-xl bg-white mb-3 overflow-hidden">
+                    <button
+                      onClick={() => toggleCity(city)}
+                      className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-stone-50 transition-colors"
+                    >
+                      <span className="flex items-center gap-2 text-sm font-semibold text-emerald-950">
+                        <MapPin className="w-4 h-4 text-emerald-700 shrink-0" />
+                        {city}
+                        <span className="text-xs font-normal text-stone-400">({list.length})</span>
+                      </span>
+                      <ChevronDown
+                        className={
+                          "w-4 h-4 text-stone-400 transition-transform shrink-0 " +
+                          (isOpen ? "rotate-180" : "")
+                        }
+                      />
+                    </button>
+                    {isOpen && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4 pb-4 pt-1 border-t border-stone-100">
+                        {list.map((o) => (
+                          <button key={o.id} onClick={() => { setOutlet(o.id); goNext(); }} className="text-left">
+                            <Card className="p-3.5 h-full hover:border-emerald-800 hover:shadow-md transition-all">
+                              <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+                                <Store className="w-3.5 h-3.5 text-emerald-800" />
+                              </div>
+                              <p className="font-semibold text-emerald-950 text-sm leading-snug">{o.name}</p>
+                            </Card>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {!loadingOutlets && cityList.length === 0 && (
+                <p className="text-sm text-stone-400 text-center py-12">
+                  Tidak ada outlet yang cocok dengan "{outletQuery}".
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -372,7 +496,7 @@ function CustomerAppInner() {
             <p className="text-xs tracking-[0.15em] text-amber-600 font-semibold mb-2" style={body}>LANGKAH 2</p>
             <h1 className="text-3xl text-emerald-950 mb-2" style={display}>Isi data reservasi</h1>
             <p className="text-stone-500 text-sm mb-8">
-              Outlet dipilih: <span className="font-semibold text-emerald-900">{OUTLETS.find((o) => o.id === outlet)?.name}</span>
+              Outlet dipilih: <span className="font-semibold text-emerald-900">{outletName(outlet)}</span>
             </p>
             <Card className="p-6 max-w-md">
               <label className="block text-xs font-semibold text-stone-600 mb-1.5">Nama lengkap</label>
@@ -581,7 +705,7 @@ function CustomerAppInner() {
               <div className="bg-[#DCF3E3] rounded-2xl rounded-tl-sm p-4 mb-4">
                 <p className="text-xs text-emerald-700 font-semibold mb-1 flex items-center gap-1.5"><MessageCircle className="w-3.5 h-3.5" /> Imperial Reservation</p>
                 <p className="text-sm text-stone-800">
-                  Halo {form.name || "Tamu"}, reservasi Anda di {OUTLETS.find((o) => o.id === outlet)?.name} pada {selectedDate} {MONTHS[monthIndex]} 2026 ({session}) berhasil dikonfirmasi.
+                  Halo {form.name || "Tamu"}, reservasi Anda di {outletName(outlet)} pada {selectedDate} {MONTHS[monthIndex]} 2026 ({session}) berhasil dikonfirmasi.
                 </p>
               </div>
               <Card className="p-6 text-center">
