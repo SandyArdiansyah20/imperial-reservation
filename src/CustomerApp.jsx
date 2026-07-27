@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChevronDown,
   MapPin,
+  AlertTriangle,
   UtensilsCrossed,
   CreditCard,
   Ticket,
@@ -163,6 +164,8 @@ function CustomerAppInner() {
   const [outletQuery, setOutletQuery] = useState("");
   const [expandedCities, setExpandedCities] = useState(() => new Set());
   const [form, setForm] = useState({ name: "", pax: "", wa: "" });
+  const [existingBookings, setExistingBookings] = useState([]);
+  const [checkingExisting, setCheckingExisting] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
   const [monthIndex, setMonthIndex] = useState(new Date().getMonth());
@@ -278,6 +281,35 @@ function CustomerAppInner() {
     loadAvailability();
     return () => { cancelled = true; };
   }, [outlet, monthIndex, step]);
+
+  // Cek ke database: apakah sudah ada reservasi lain dengan nama & nomor WhatsApp
+  // yang sama persis? Kalau ada, tampilkan sebagai notif informasi (tidak memblokir
+  // pelanggan booking lagi, misalnya untuk tanggal/sesi yang berbeda).
+  useEffect(() => {
+    const name = form.name.trim();
+    const wa = form.wa.trim();
+    if (step !== 2 || !name || wa.length < 8) {
+      setExistingBookings([]);
+      return;
+    }
+    let cancelled = false;
+    setCheckingExisting(true);
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("reservations")
+        .select("booking_code, reservation_date, session, outlet_id, status")
+        .ilike("customer_name", name)
+        .eq("customer_whatsapp", wa)
+        .order("reservation_date", { ascending: false })
+        .limit(5);
+      if (cancelled) return;
+      if (!error && data) {
+        setExistingBookings(data);
+      }
+      setCheckingExisting(false);
+    }, 600); // debounce supaya tidak query tiap ketikan huruf
+    return () => { cancelled = true; clearTimeout(timer); setCheckingExisting(false); };
+  }, [form.name, form.wa, step]);
 
   function dateKeyOf(monthIdx, day) {
     return `${year}-${String(monthIdx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -521,13 +553,49 @@ function CustomerAppInner() {
             </p>
             <Card className="p-6 max-w-md">
               <label className="block text-xs font-semibold text-stone-600 mb-1.5">Nama lengkap</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nama Anda" className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-amber-400" />
-              <label className="block text-xs font-semibold text-stone-600 mb-1.5">Jumlah tamu</label>
-              <input value={form.pax} onChange={(e) => setForm({ ...form, pax: e.target.value.replace(/\D/g, "") })} placeholder="4" inputMode="numeric" className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-amber-400" />
-              <label className="block text-xs font-semibold text-stone-600 mb-1.5">Nomor WhatsApp</label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Nama Anda"
+                className={
+                  "w-full rounded-lg border px-3 py-2.5 text-sm mb-1 focus:outline-none focus:ring-2 " +
+                  (form.name.trim() ? "border-stone-300 focus:ring-amber-400" : "border-amber-300 focus:ring-amber-400")
+                }
+              />
+              {!form.name.trim() && (
+                <p className="text-[11px] text-amber-600 mb-3">Isi nama lengkap terlebih dahulu sebelum melanjutkan.</p>
+              )}
+              <label className={"block text-xs font-semibold mb-1.5 mt-3 " + (form.name.trim() ? "text-stone-600" : "text-stone-300")}>Jumlah tamu</label>
+              <input
+                value={form.pax}
+                onChange={(e) => setForm({ ...form, pax: e.target.value.replace(/\D/g, "") })}
+                placeholder="4"
+                inputMode="numeric"
+                disabled={!form.name.trim()}
+                className={
+                  "w-full rounded-lg border px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-amber-400 " +
+                  (form.name.trim() ? "border-stone-300 bg-white" : "border-stone-200 bg-stone-50 text-stone-300 cursor-not-allowed")
+                }
+              />
+              <label className={"block text-xs font-semibold mb-1.5 " + (form.name.trim() ? "text-stone-600" : "text-stone-300")}>Nomor WhatsApp</label>
               <div className="flex gap-2 mb-2">
-                <input value={form.wa} onChange={(e) => setForm({ ...form, wa: e.target.value.replace(/\D/g, "") })} placeholder="0812xxxxxxxx" inputMode="numeric" className="flex-1 rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <button onClick={() => setOtpSent(true)} disabled={form.wa.length < 8} className={"px-3 rounded-lg text-xs font-semibold whitespace-nowrap " + (form.wa.length < 8 ? "bg-stone-100 text-stone-400" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100")}>
+                <input
+                  value={form.wa}
+                  onChange={(e) => setForm({ ...form, wa: e.target.value.replace(/\D/g, "") })}
+                  placeholder="0812xxxxxxxx"
+                  inputMode="numeric"
+                  disabled={!form.name.trim()}
+                  className={
+                    "flex-1 rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 " +
+                    (form.name.trim() ? "border-stone-300 bg-white" : "border-stone-200 bg-stone-50 text-stone-300 cursor-not-allowed")
+                  }
+                />
+                <button
+                  onClick={() => setOtpSent(true)}
+                  disabled={!form.name.trim() || form.wa.length < 8}
+                  title={!form.name.trim() ? "Isi nama lengkap terlebih dahulu" : undefined}
+                  className={"px-3 rounded-lg text-xs font-semibold whitespace-nowrap " + (!form.name.trim() || form.wa.length < 8 ? "bg-stone-100 text-stone-400 cursor-not-allowed" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100")}
+                >
                   Kirim OTP
                 </button>
               </div>
@@ -539,6 +607,25 @@ function CustomerAppInner() {
               )}
               {otpVerified && (
                 <p className="mt-3 text-xs text-emerald-700 flex items-center gap-1.5 font-medium"><ShieldCheck className="w-4 h-4" /> Nomor WhatsApp terverifikasi</p>
+              )}
+
+              {checkingExisting && (
+                <p className="mt-3 text-[11px] text-stone-400">Memeriksa riwayat reservasi...</p>
+              )}
+              {!checkingExisting && existingBookings.length > 0 && (
+                <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                  <p className="text-sm text-amber-800 font-medium mb-1.5 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0" /> Nama & nomor ini sudah pernah reservasi
+                  </p>
+                  <ul className="text-xs text-amber-700 space-y-1 mb-1.5">
+                    {existingBookings.map((b) => (
+                      <li key={b.booking_code}>
+                        <span className="font-mono">{b.booking_code}</span> · {b.reservation_date} · {b.session} · {outletName(b.outlet_id) || b.outlet_id}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] text-amber-600">Kalau ini memang reservasi baru (tanggal/outlet berbeda), silakan lanjutkan seperti biasa.</p>
+                </div>
               )}
             </Card>
             <div className="flex gap-3 mt-8">
@@ -670,10 +757,6 @@ function CustomerAppInner() {
                 <QrCode className={"w-5 h-5 " + (paymentMethod === "qris" ? "text-emerald-800" : "text-stone-400")} />
                 <div><p className="text-sm font-semibold text-emerald-950">QRIS</p><p className="text-[11px] text-stone-500">Bayar sekarang</p></div>
               </button>
-              <button onClick={() => setPaymentMethod("cash")} className={"flex items-center gap-2.5 rounded-xl border px-4 py-3 text-left transition-colors " + (paymentMethod === "cash" ? "border-emerald-800 bg-emerald-50" : "border-stone-200 bg-white hover:border-stone-300")}>
-                <Banknote className={"w-5 h-5 " + (paymentMethod === "cash" ? "text-emerald-800" : "text-stone-400")} />
-                <div><p className="text-sm font-semibold text-emerald-950">Bayar di Tempat</p><p className="text-[11px] text-stone-500">Tunai / EDC di outlet</p></div>
-              </button>
             </div>
 
             <Card className="p-6 max-w-md">
@@ -698,14 +781,6 @@ function CustomerAppInner() {
                   </div>
                   <PrimaryButton onClick={handlePay} disabled={paying || paid} className="w-full">
                     {paid ? (<><Check className="w-4 h-4" /> Pembayaran berhasil</>) : paying ? "Memeriksa pembayaran..." : (<><QrCode className="w-4 h-4" /> Saya sudah membayar</>)}
-                  </PrimaryButton>
-                </>
-              )}
-              {paymentMethod === "cash" && (
-                <>
-                  <p className="text-[11px] text-stone-400 mb-5">Deposit dibayarkan tunai atau EDC langsung di outlet, maksimal 1 jam sebelum sesi dimulai. Slot tetap kami tahan sampai batas waktu tersebut.</p>
-                  <PrimaryButton onClick={handlePay} disabled={paying || paid} className="w-full">
-                    {paid ? (<><Check className="w-4 h-4" /> Reservasi dikonfirmasi</>) : paying ? "Memproses..." : (<><Banknote className="w-4 h-4" /> Konfirmasi reservasi</>)}
                   </PrimaryButton>
                 </>
               )}
