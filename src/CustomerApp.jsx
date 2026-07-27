@@ -59,7 +59,7 @@ const MONTHS = [
 ];
 
 const SESSIONS = ["17:30 — Buka Puasa", "19:00 — Malam"];
-const SESSION_CAPACITY = 15; // maksimal reservasi per sesi, sesuaikan dengan kapasitas outlet Anda
+const SESSION_CAPACITY = 7 // maksimal reservasi per sesi, sesuaikan dengan kapasitas outlet Anda
 
 function rupiah(n) {
   return "Rp" + n.toLocaleString("id-ID");
@@ -569,7 +569,7 @@ function CustomerAppInner() {
               <input
                 value={form.pax}
                 onChange={(e) => setForm({ ...form, pax: e.target.value.replace(/\D/g, "") })}
-                placeholder="4"
+                placeholder="1"
                 inputMode="numeric"
                 disabled={!form.name.trim()}
                 className={
