@@ -35,28 +35,26 @@ const body = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 // dengan id di tabel `outlets` Supabase).
 const STAFF_CODES = {
   IMP2026: "all", //master admin
-  KEMANG2026: "kemang",
-  BSD2026: "bsd",
   
   //PROVINSI BALI
-  DENPASAR2026:"denpasar",
-  SEMINYAK2026:"seminyak",
-  SANUR2026: "sanur",
+  DENPASAR2026:"balidenpasar",
+  SEMINYAK2026:"baliseminyak",
+  SANUR2026: "balisanur",
   //PROVONSI BANDUNG
-  DAGO2026: "dago",
-  PASTEUR2026: "pasteur",
-  RIAU2026: "riau",
-  CIHAMPELAS2026: "cihampelas2026",
+  DAGO2026: "dagoo",
+  PASTEUR2026: "bandungpaskal",
+  RIAU2026: "bandungriau",
+  CIHAMPELAS2026: "cihampelas",
   //BEKASI
   CIKARANG2026: "cikarang",
-  SUMMARECONBEKASI2026: "summareconbekasi",
+  SUMMARECONBEKASI2026: "summarecon",
   BEKASIBARAT2026:"bekasibarat",
   //BOGOR
   BOGORBARU2026: "bogorbaru",
-  PAJAJARAN2026: "pajajaran",
+  PAJAJARAN2026: "bogorpajajaran",
   //DEPOK
   MARGONDA2026: "margonda",
-  DEPOKTOWNSQUARE2026: "depoktownsquare",
+  DEPOKTOWNSQUARE2026: "depoktown",
   //JAKARTA BARAT
   PURIINDAH2026: "puriindah",
   GROGOL2026: "grogol",
@@ -68,9 +66,9 @@ const STAFF_CODES = {
   THAMRIN2026: "thamrin",
   MENTENG2026: "menteng",
   //JAKARTA SELATAN
-  KEMANGRAYA2026: "kemangraya",
+  KEMANGRAYA2026: "kemang2",
   KEMANG2026: "kemang",
-  SENAYANCITY2026: "senayancity",
+  SENAYANCITY2026: "senayan",
   CIPETE2026: "cipete",
   KUNINGAN2026: "kuningan",
   PONDOKINDAH2026: "pondokindah",
@@ -80,40 +78,40 @@ const STAFF_CODES = {
   RAWAMANGUN2026: "rawamangun",
   CIBUBUR2026: "cibubur",
   //JAKARTA UTARA
-  SUNTER2026: "sunter",
+  SUNTER2026: "sunterr",
   PIK2026: "pik",
-  PANTAIINDAHKAPUK22026: "pantaiindahkalpuk2",
+  PANTAIINDAHKAPUK22026: "pantaiindah",
   KELAPAGADING2026:"kelapagading",
   //LAMPUNG
-  RAJABASA2026: "rajabasa2026",
+  RAJABASA2026: "lampungrajabasa",
   //MAKASAR
-  PANAKKUKANG2026:"panakkukang",
-  PETTARANI2026: "pettarani",
+  PANAKKUKANG2026:"makassarpanakkukang",
+  PETTARANI2026: "makassarpettarani",
   //MALANG
-  SOEKARNOHATTA2026: "soekarnohatta",
-  IJEN2026: "ijen",
+  SOEKARNOHATTA2026: "malangsoekarnohatta",
+  IJEN2026: "malangijen",
   //MANADO
   MANADO2026: "manado",
   //MEDAN
-  GATOTSUBROTO2026: "gatotsubroto",
-  POLONIA2026: "polonia",
+  GATOTSUBROTO2026: "medangatotsubroto",
+  POLONIA2026: "medanpolonia",
   //PALEMBANG
-  SUDIRMANPALEMBANG2026: "sudirmanpalembang",
+  SUDIRMANPALEMBANG2026: "palembangsudirman",
   //PEKANBARU
-  SUDIRMANPEKANBARU2026: "sudirmanpekanbaru",
+  SUDIRMANPEKANBARU2026: "pekanbarusudirman",
   //PONTIANAK
   PONTIANAK2026: "pontianak",
   //SEMARANG
-  SIMPANGLIMA2026: "simpanglima",
-  TEMBALANG2026: "tembalang",
+  SIMPANGLIMA2026: "semarangsimpang",
+  TEMBALANG2026: "semarangtembalang",
   //SIDOARJO
   SIDOARJO2026: "sidorjo",
   //SOLO
-  KARTASURA2026: "kartasura",
+  KARTASURA2026: "solokartasura",
   //SURABAYA:
-  RUNGKUT2026: "rungkut",
-  HRMUHAMMAD2026: "hrmuhammad2026",
-  DARMO2026: "darmo",
+  RUNGKUT2026: "surabayarungkut",
+  HRMUHAMMAD2026: "surabayahr",
+  DARMO2026: "surabayadarmo",
   //TANGGERANG 
   GADINGSERPONG2026: "gadingserpong",
   KARAWACI2026: "karawaci",
@@ -124,8 +122,10 @@ const STAFF_CODES = {
   ALAMSUTERA2026: "alamsutera",
   SERPONG2026: "serpong",
   //YOGYAKARTA
-  SUDIRMANJOGJA2026: "sudirmanjogja",
-  MALIOBORO2026: "malioboro",
+  SUDIRMANJOGJA2026: "jogjasudirman",
+  MALIOBORO2026: "jogjamalioboro",
+  //BALIKPAPAN
+  BALIKPAPAN2026: "balikpapan",
 };
 
 const DEFAULT_OUTLETS = [
