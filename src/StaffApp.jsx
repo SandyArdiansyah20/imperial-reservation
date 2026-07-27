@@ -27,7 +27,106 @@ const body = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
 // Kode akses staff. Untuk penggunaan nyata, sebaiknya diverifikasi lewat
 // backend/API, bukan disimpan langsung di kode frontend seperti ini.
-const STAFF_ACCESS_CODE = "IMP2026";
+//
+// "IMP2026" tetap jadi kode MANAJER — bisa lihat & kelola semua outlet.
+// Kode lain di bawah cuma bisa lihat & kelola outlet miliknya sendiri.
+// Mau tambah kode untuk outlet lain? Tambahkan baris baru di sini,
+// formatnya: "KODE_RAHASIA": "id_outlet" (id_outlet harus sama persis
+// dengan id di tabel `outlets` Supabase).
+const STAFF_CODES = {
+  IMP2026: "all", //master admin
+  KEMANG2026: "kemang",
+  BSD2026: "bsd",
+  
+  //PROVINSI BALI
+  DENPASAR2026:"denpasar",
+  SEMINYAK2026:"seminyak",
+  SANUR2026: "sanur",
+  //PROVONSI BANDUNG
+  DAGO2026: "dago",
+  PASTEUR2026: "pasteur",
+  RIAU2026: "riau",
+  CIHAMPELAS2026: "cihampelas2026",
+  //BEKASI
+  CIKARANG2026: "cikarang",
+  SUMMARECONBEKASI2026: "summareconbekasi",
+  BEKASIBARAT2026:"bekasibarat",
+  //BOGOR
+  BOGORBARU2026: "bogorbaru",
+  PAJAJARAN2026: "pajajaran",
+  //DEPOK
+  MARGONDA2026: "margonda",
+  DEPOKTOWNSQUARE2026: "depoktownsquare",
+  //JAKARTA BARAT
+  PURIINDAH2026: "puriindah",
+  GROGOL2026: "grogol",
+  KEBONJERUK2026: "kebonjeruk",
+  CILEDUG2026: "ciledug",
+  //JAKARTA PUSAT
+  SUDIRMAN2026: "sudirman",
+  GAMBIR2026: "gambir",
+  THAMRIN2026: "thamrin",
+  MENTENG2026: "menteng",
+  //JAKARTA SELATAN
+  KEMANGRAYA2026: "kemangraya",
+  KEMANG2026: "kemang",
+  SENAYANCITY2026: "senayancity",
+  CIPETE2026: "cipete",
+  KUNINGAN2026: "kuningan",
+  PONDOKINDAH2026: "pondokindah",
+  //JAKARTA TIMUR
+  KALIMALANG2026: "kalimalang",
+  CAKUNG2026: "cakung",
+  RAWAMANGUN2026: "rawamangun",
+  CIBUBUR2026: "cibubur",
+  //JAKARTA UTARA
+  SUNTER2026: "sunter",
+  PIK2026: "pik",
+  PANTAIINDAHKAPUK22026: "pantaiindahkalpuk2",
+  KELAPAGADING2026:"kelapagading",
+  //LAMPUNG
+  RAJABASA2026: "rajabasa2026",
+  //MAKASAR
+  PANAKKUKANG2026:"panakkukang",
+  PETTARANI2026: "pettarani",
+  //MALANG
+  SOEKARNOHATTA2026: "soekarnohatta",
+  IJEN2026: "ijen",
+  //MANADO
+  MANADO2026: "manado",
+  //MEDAN
+  GATOTSUBROTO2026: "gatotsubroto",
+  POLONIA2026: "polonia",
+  //PALEMBANG
+  SUDIRMANPALEMBANG2026: "sudirmanpalembang",
+  //PEKANBARU
+  SUDIRMANPEKANBARU2026: "sudirmanpekanbaru",
+  //PONTIANAK
+  PONTIANAK2026: "pontianak",
+  //SEMARANG
+  SIMPANGLIMA2026: "simpanglima",
+  TEMBALANG2026: "tembalang",
+  //SIDOARJO
+  SIDOARJO2026: "sidorjo",
+  //SOLO
+  KARTASURA2026: "kartasura",
+  //SURABAYA:
+  RUNGKUT2026: "rungkut",
+  HRMUHAMMAD2026: "hrmuhammad2026",
+  DARMO2026: "darmo",
+  //TANGGERANG 
+  GADINGSERPONG2026: "gadingserpong",
+  KARAWACI2026: "karawaci",
+  CIKOKOL2026: "cikokol",
+  //TANGGERANG SELATAN
+  BSD2026: "bsd",
+  BINTARO2026: "bintaro",
+  ALAMSUTERA2026: "alamsutera",
+  SERPONG2026: "serpong",
+  //YOGYAKARTA
+  SUDIRMANJOGJA2026: "sudirmanjogja",
+  MALIOBORO2026: "malioboro",
+};
 
 const DEFAULT_OUTLETS = [
   { id: "kemang", name: "Imperial Kemang" },
@@ -83,6 +182,15 @@ function StaffAppInner() {
       return false;
     }
   });
+  // "all" = manajer (bisa lihat semua outlet), selain itu = id outlet spesifik
+  // yang cuma boleh dikelola staff itu sendiri.
+  const [staffOutlet, setStaffOutlet] = useState(() => {
+    try {
+      return sessionStorage.getItem("imperial_staff_outlet") || "all";
+    } catch {
+      return "all";
+    }
+  });
   const [codeInput, setCodeInput] = useState("");
   const [authError, setAuthError] = useState("");
 
@@ -127,13 +235,20 @@ function StaffAppInner() {
     async function loadReservations() {
       setLoadingReservations(true);
       setFetchError("");
-      const { data, error } = await supabase
+      let queryBuilder = supabase
         .from("reservations")
         .select(
           "id, booking_code, customer_name, customer_whatsapp, pax, outlet_id, reservation_date, session, status, payment_method, payment_status, total_amount, paid_amount, reservation_items(quantity, menus(name))"
         )
         .eq("reservation_date", dateFilter)
         .order("created_at", { ascending: true });
+
+      // Staff outlet spesifik (bukan manajer) cuma boleh lihat data outletnya sendiri
+      if (staffOutlet !== "all") {
+        queryBuilder = queryBuilder.eq("outlet_id", staffOutlet);
+      }
+
+      const { data, error } = await queryBuilder;
 
       if (cancelled) return;
       if (error) {
@@ -166,14 +281,18 @@ function StaffAppInner() {
     }
     loadReservations();
     return () => { cancelled = true; };
-  }, [isAuthed, dateFilter]);
+  }, [isAuthed, dateFilter, staffOutlet]);
 
   function handleLogin(e) {
     e.preventDefault();
-    if (codeInput.trim().toUpperCase() === STAFF_ACCESS_CODE) {
+    const matchedOutlet = STAFF_CODES[codeInput.trim().toUpperCase()];
+    if (matchedOutlet) {
       try {
         sessionStorage.setItem("imperial_staff_authed", "true");
+        sessionStorage.setItem("imperial_staff_outlet", matchedOutlet);
       } catch {}
+      setStaffOutlet(matchedOutlet);
+      setOutletFilter(matchedOutlet === "all" ? "all" : matchedOutlet);
       setIsAuthed(true);
       setAuthError("");
     } else {
@@ -184,8 +303,10 @@ function StaffAppInner() {
   function handleLogout() {
     try {
       sessionStorage.removeItem("imperial_staff_authed");
+      sessionStorage.removeItem("imperial_staff_outlet");
     } catch {}
     setIsAuthed(false);
+    setStaffOutlet("all");
     setCodeInput("");
   }
 
@@ -195,7 +316,7 @@ function StaffAppInner() {
     setDateFilter(todayISO());
     setQuery("");
     setStatusFilter("all");
-    setOutletFilter("all");
+    setOutletFilter(staffOutlet === "all" ? "all" : staffOutlet);
   }
 
   // Export data reservasi yang sedang tampil (sesuai filter tanggal/pencarian/status/outlet
@@ -367,7 +488,9 @@ function StaffAppInner() {
             </div>
             <div className="min-w-0">
               <p className="text-lg leading-none" style={display}>Imperial Staff</p>
-              <p className="text-[11px] text-emerald-300 tracking-wide">Dashboard reservasi hari ini</p>
+              <p className="text-[11px] text-emerald-300 tracking-wide">
+                {staffOutlet === "all" ? "Dashboard reservasi hari ini · Semua outlet" : `Dashboard reservasi hari ini · ${outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}`}
+              </p>
             </div>
           </div>
           <p className="text-[11px] text-emerald-300 hidden sm:block">Ramadan &amp; Lebaran 2026</p>
@@ -423,17 +546,26 @@ function StaffAppInner() {
               className="w-full rounded-full border border-stone-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
-          <select
-            value={outletFilter}
-            onChange={(e) => setOutletFilter(e.target.value)}
-            className="rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-          >
-            <option value="all">Semua outlet</option>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
-            ))}
-          </select>
-          {(dateFilter !== todayISO() || query || statusFilter !== "all" || outletFilter !== "all") && (
+          {staffOutlet === "all" ? (
+            <select
+              value={outletFilter}
+              onChange={(e) => setOutletFilter(e.target.value)}
+              className="rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <option value="all">Semua outlet</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              title="Akun ini terkunci ke satu outlet"
+              className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 font-medium flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Store className="w-3.5 h-3.5" /> {outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}
+            </span>
+          )}
+          {(dateFilter !== todayISO() || query || statusFilter !== "all" || (staffOutlet === "all" && outletFilter !== "all")) && (
             <button
               onClick={resetDashboard}
               className="text-xs font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50 hover:border-stone-300 transition-colors whitespace-nowrap"
@@ -442,6 +574,12 @@ function StaffAppInner() {
             </button>
           )}
         </div>
+
+        {staffOutlet !== "all" && (
+          <p className="text-[11px] text-stone-400 mb-4 -mt-2">
+            Akun ini cuma bisa melihat & mengelola reservasi outlet <strong>{outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}</strong>.
+          </p>
+        )}
 
         {loadingReservations && (
           <p className="text-xs text-stone-400 mb-4">Memuat reservasi...</p>
