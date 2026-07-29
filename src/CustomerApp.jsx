@@ -333,7 +333,46 @@ function CustomerAppInner() {
     () => MENUS.reduce((sum, m) => sum + (menuQty[m.id] || 0) * m.price, 0),
     [menuQty]
   );
-  const minPayment = Math.round(total * 0.5);
+
+  const [voucherInput, setVoucherInput] = useState("");
+  const [voucherApplied, setVoucherApplied] = useState(null); // { code, discount_amount, voucher_type }
+  const [voucherChecking, setVoucherChecking] = useState(false);
+  const [voucherError, setVoucherError] = useState("");
+
+  const voucherDiscount = voucherApplied?.discount_amount || 0;
+  const discountedTotal = Math.max(0, total - voucherDiscount);
+  const baseMinPayment = Math.round(total * 0.5);
+  // Voucher dipotong PENUH langsung dari uang muka (bukan dibagi rata 50/50),
+  // supaya potongannya langsung terasa saat reservasi, bukan nanti di sisa bayar.
+  const minPayment = Math.max(0, baseMinPayment - voucherDiscount);
+
+  async function applyVoucher() {
+    if (!voucherInput.trim()) return;
+    setVoucherChecking(true);
+    setVoucherError("");
+    const { data, error } = await supabase.rpc("check_voucher", {
+      p_code: voucherInput.trim(),
+      p_subtotal: total,
+    });
+    setVoucherChecking(false);
+    const result = Array.isArray(data) ? data[0] : data;
+    if (error || !result?.success) {
+      setVoucherError(result?.message || "Gagal memeriksa voucher");
+      setVoucherApplied(null);
+      return;
+    }
+    setVoucherApplied({
+      code: voucherInput.trim(),
+      discount_amount: result.discount_amount,
+      voucher_type: result.voucher_type,
+    });
+  }
+
+  function removeVoucher() {
+    setVoucherApplied(null);
+    setVoucherInput("");
+    setVoucherError("");
+  }
 
   const daysInMonth = new Date(2026, monthIndex + 1, 0).getDate();
   const firstDow = new Date(2026, monthIndex, 1).getDay();
@@ -366,6 +405,9 @@ function CustomerAppInner() {
     setBookingCode(null);
     setSaveError("");
     setAvailability({});
+    setVoucherInput("");
+    setVoucherApplied(null);
+    setVoucherError("");
   }
 
   function handlePickDate(d) {
@@ -396,13 +438,27 @@ function CustomerAppInner() {
             status: "pending",
             payment_method: paymentMethod,
             payment_status: paymentMethod === "qris" ? "paid" : "unpaid",
-            total_amount: total,
+            total_amount: discountedTotal,
             paid_amount: paymentMethod === "qris" ? minPayment : 0,
           })
           .select()
           .single();
 
         if (resError) throw resError;
+
+        // Kunci voucher secara resmi sekarang (baru terhitung "terpakai" setelah
+        // reservasi benar-benar tersimpan, bukan cuma saat preview/cek voucher)
+        if (voucherApplied) {
+          const { data: redeemData } = await supabase.rpc("redeem_voucher", {
+            p_code: voucherApplied.code,
+            p_reservation_id: reservation.id,
+            p_subtotal: total,
+          });
+          const redeemResult = Array.isArray(redeemData) ? redeemData[0] : redeemData;
+          if (!redeemResult?.success) {
+            console.warn("Voucher gagal dikunci saat pembayaran:", redeemResult?.message);
+          }
+        }
 
         const items = MENUS.filter((m) => menuQty[m.id] > 0).map((m) => ({
           reservation_id: reservation.id,
@@ -759,13 +815,58 @@ function CustomerAppInner() {
               </button>
             </div>
 
+            <Card className="p-4 max-w-md mb-4">
+              <p className="text-xs font-semibold text-stone-600 mb-2">Punya kode voucher?</p>
+              {voucherApplied ? (
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800 flex items-center gap-1.5">
+                      <Ticket className="w-3.5 h-3.5" /> {voucherApplied.code}
+                      <span className="text-[10px] font-normal bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">
+                        {voucherApplied.voucher_type === "physical" ? "Voucher fisik" : "Voucher elektronik"}
+                      </span>
+                    </p>
+                    <p className="text-xs text-emerald-700">Potongan {rupiah(voucherApplied.discount_amount)}</p>
+                  </div>
+                  <button onClick={removeVoucher} className="text-xs text-stone-400 hover:text-rose-500 underline">Hapus</button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={voucherInput}
+                    onChange={(e) => { setVoucherInput(e.target.value.toUpperCase()); setVoucherError(""); }}
+                    placeholder="Masukkan kode voucher"
+                    className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm tracking-wide focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <button
+                    onClick={applyVoucher}
+                    disabled={!voucherInput.trim() || voucherChecking}
+                    className={"px-4 rounded-lg text-xs font-semibold whitespace-nowrap " + (!voucherInput.trim() || voucherChecking ? "bg-stone-100 text-stone-400" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100")}
+                  >
+                    {voucherChecking ? "Mengecek..." : "Terapkan"}
+                  </button>
+                </div>
+              )}
+              {voucherError && <p className="text-xs text-rose-500 mt-2">{voucherError}</p>}
+            </Card>
+
             <Card className="p-6 max-w-md">
               <div className="flex justify-between text-sm text-stone-500 mb-2"><span>Total pesanan</span><span>{rupiah(total)}</span></div>
+              {voucherApplied && (
+                <div className="flex justify-between text-sm text-emerald-700 mb-2">
+                  <span>Potongan voucher</span><span>− {rupiah(voucherApplied.discount_amount)}</span>
+                </div>
+              )}
               <div className="h-px bg-stone-100 my-3" />
               <div className="flex justify-between items-baseline mb-1">
-                <span className="text-sm font-medium text-stone-700">Minimal dibayar (50%)</span>
+                <span className="text-sm font-medium text-stone-700">
+                  Dibayar sekarang{voucherApplied ? " (sudah dipotong voucher)" : " (50%)"}
+                </span>
                 <span className="text-2xl font-semibold text-emerald-950" style={display}>{rupiah(minPayment)}</span>
               </div>
+              <p className="text-[11px] text-stone-400 mb-1">
+                Sisa {rupiah(discountedTotal - minPayment)} dibayar di outlet saat hari-H.
+              </p>
 
               {!paymentMethod && (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">Pilih metode pembayaran di atas terlebih dahulu.</p>

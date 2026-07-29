@@ -15,8 +15,10 @@ import {
   LogOut,
   CalendarDays,
   Trash2,
+  Ticket,
+  Plus,
+  Power,
   Home,
-  Download,
 } from "lucide-react";
 
 const FONT_IMPORT =
@@ -27,108 +29,9 @@ const body = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
 // Kode akses staff. Untuk penggunaan nyata, sebaiknya diverifikasi lewat
 // backend/API, bukan disimpan langsung di kode frontend seperti ini.
-//
-// "IMP2026" tetap jadi kode MANAJER — bisa lihat & kelola semua outlet.
-// Kode lain di bawah cuma bisa lihat & kelola outlet miliknya sendiri.
-// Mau tambah kode untuk outlet lain? Tambahkan baris baru di sini,
-// formatnya: "KODE_RAHASIA": "id_outlet" (id_outlet harus sama persis
-// dengan id di tabel `outlets` Supabase).
-const STAFF_CODES = {
-  IMP2026: "all", //master admin
-  
-  //PROVINSI BALI
-  DENPASAR2026:"balidenpasar",
-  SEMINYAK2026:"baliseminyak",
-  SANUR2026: "balisanur",
-  //PROVONSI BANDUNG
-  DAGO2026: "dagoo",
-  PASTEUR2026: "bandungpaskal",
-  RIAU2026: "bandungriau",
-  CIHAMPELAS2026: "cihampelas",
-  //BEKASI
-  CIKARANG2026: "cikarang",
-  SUMMARECONBEKASI2026: "summarecon",
-  BEKASIBARAT2026:"bekasibarat",
-  //BOGOR
-  BOGORBARU2026: "bogorbaru",
-  PAJAJARAN2026: "bogorpajajaran",
-  //DEPOK
-  MARGONDA2026: "margonda",
-  DEPOKTOWNSQUARE2026: "depoktown",
-  //JAKARTA BARAT
-  PURIINDAH2026: "puriindah",
-  GROGOL2026: "grogol",
-  KEBONJERUK2026: "kebonjeruk",
-  CILEDUG2026: "ciledug",
-  //JAKARTA PUSAT
-  SUDIRMAN2026: "sudirman",
-  GAMBIR2026: "gambir",
-  THAMRIN2026: "thamrin",
-  MENTENG2026: "menteng",
-  //JAKARTA SELATAN
-  KEMANGRAYA2026: "kemang2",
-  KEMANG2026: "kemang",
-  SENAYANCITY2026: "senayan",
-  CIPETE2026: "cipete",
-  KUNINGAN2026: "kuningan",
-  PONDOKINDAH2026: "pondokindah",
-  //JAKARTA TIMUR
-  KALIMALANG2026: "kalimalang",
-  CAKUNG2026: "cakung",
-  RAWAMANGUN2026: "rawamangun",
-  CIBUBUR2026: "cibubur",
-  //JAKARTA UTARA
-  SUNTER2026: "sunterr",
-  PIK2026: "pik",
-  PANTAIINDAHKAPUK22026: "pantaiindah",
-  KELAPAGADING2026:"kelapagading",
-  //LAMPUNG
-  RAJABASA2026: "lampungrajabasa",
-  //MAKASAR
-  PANAKKUKANG2026:"makassarpanakkukang",
-  PETTARANI2026: "makassarpettarani",
-  //MALANG
-  SOEKARNOHATTA2026: "malangsoekarnohatta",
-  IJEN2026: "malangijen",
-  //MANADO
-  MANADO2026: "manado",
-  //MEDAN
-  GATOTSUBROTO2026: "medangatotsubroto",
-  POLONIA2026: "medanpolonia",
-  //PALEMBANG
-  SUDIRMANPALEMBANG2026: "palembangsudirman",
-  //PEKANBARU
-  SUDIRMANPEKANBARU2026: "pekanbarusudirman",
-  //PONTIANAK
-  PONTIANAK2026: "pontianak",
-  //SEMARANG
-  SIMPANGLIMA2026: "semarangsimpang",
-  TEMBALANG2026: "semarangtembalang",
-  //SIDOARJO
-  SIDOARJO2026: "sidorjo",
-  //SOLO
-  KARTASURA2026: "solokartasura",
-  //SURABAYA:
-  RUNGKUT2026: "surabayarungkut",
-  HRMUHAMMAD2026: "surabayahr",
-  DARMO2026: "surabayadarmo",
-  //TANGGERANG 
-  GADINGSERPONG2026: "gadingserpong",
-  KARAWACI2026: "karawaci",
-  CIKOKOL2026: "cikokol",
-  //TANGGERANG SELATAN
-  BSD2026: "bsd",
-  BINTARO2026: "bintaro",
-  ALAMSUTERA2026: "alamsutera",
-  SERPONG2026: "serpong",
-  //YOGYAKARTA
-  SUDIRMANJOGJA2026: "jogjasudirman",
-  MALIOBORO2026: "jogjamalioboro",
-  //BALIKPAPAN
-  BALIKPAPAN2026: "balikpapan",
-};
+const STAFF_ACCESS_CODE = "IMP2026";
 
-const DEFAULT_OUTLETS = [
+const OUTLETS = [
   { id: "kemang", name: "Imperial Kemang" },
   { id: "bsd", name: "Imperial BSD" },
   { id: "pik", name: "Imperial PIK" },
@@ -137,6 +40,18 @@ const DEFAULT_OUTLETS = [
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function rupiah(n) {
+  return "Rp" + Number(n || 0).toLocaleString("id-ID");
+}
+
+function Card({ children, className = "" }) {
+  return (
+    <div className={"bg-white rounded-2xl border border-stone-200 shadow-sm " + className}>
+      {children}
+    </div>
+  );
 }
 
 const STATUS_META = {
@@ -182,15 +97,6 @@ function StaffAppInner() {
       return false;
     }
   });
-  // "all" = manajer (bisa lihat semua outlet), selain itu = id outlet spesifik
-  // yang cuma boleh dikelola staff itu sendiri.
-  const [staffOutlet, setStaffOutlet] = useState(() => {
-    try {
-      return sessionStorage.getItem("imperial_staff_outlet") || "all";
-    } catch {
-      return "all";
-    }
-  });
   const [codeInput, setCodeInput] = useState("");
   const [authError, setAuthError] = useState("");
 
@@ -202,32 +108,96 @@ function StaffAppInner() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [outletFilter, setOutletFilter] = useState("all");
 
-  const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
-  const [outletsError, setOutletsError] = useState("");
+  const [activeTab, setActiveTab] = useState("reservasi"); // 'reservasi' | 'voucher'
 
-  // Ambil daftar outlet dari database yang sama dengan CustomerApp, supaya
-  // filter dropdown di staff ikut lengkap begitu ada outlet baru ditambahkan.
+  const [vouchers, setVouchers] = useState([]);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [voucherListError, setVoucherListError] = useState("");
+  const [vForm, setVForm] = useState({
+    code: "",
+    type: "electronic",
+    discount_type: "percentage",
+    discount_value: "",
+    min_purchase: "",
+    max_uses: "1",
+    expires_at: "",
+  });
+  const [creatingVoucher, setCreatingVoucher] = useState(false);
+  const [createVoucherError, setCreateVoucherError] = useState("");
+  const [createVoucherSuccess, setCreateVoucherSuccess] = useState("");
+
   useEffect(() => {
-    if (!isAuthed) return;
+    if (!isAuthed || activeTab !== "voucher") return;
     let cancelled = false;
-    async function loadOutlets() {
+    async function loadVouchers() {
+      setLoadingVouchers(true);
+      setVoucherListError("");
       const { data, error } = await supabase
-        .from("outlets")
-        .select("id, name, city")
-        .order("city", { ascending: true });
+        .from("vouchers")
+        .select("*")
+        .order("created_at", { ascending: false });
       if (cancelled) return;
       if (error) {
-        console.error("Gagal memuat outlet:", error);
-        setOutletsError(error.message || "Gagal memuat outlet dari database.");
-      } else if (data && data.length > 0) {
-        setOutlets(data);
-        setOutletsError("");
+        console.error(error);
+        setVoucherListError("Gagal memuat daftar voucher.");
+      } else {
+        setVouchers(data || []);
       }
+      setLoadingVouchers(false);
     }
-    loadOutlets();
+    loadVouchers();
     return () => { cancelled = true; };
-  }, [isAuthed]);
+  }, [isAuthed, activeTab]);
 
+  async function createVoucher(e) {
+    e.preventDefault();
+    setCreateVoucherError("");
+    setCreateVoucherSuccess("");
+
+    if (!vForm.code.trim() || !vForm.discount_value) {
+      setCreateVoucherError("Kode voucher dan nilai potongan wajib diisi.");
+      return;
+    }
+
+    setCreatingVoucher(true);
+    const { data, error } = await supabase
+      .from("vouchers")
+      .insert({
+        code: vForm.code.trim().toUpperCase(),
+        type: vForm.type,
+        discount_type: vForm.discount_type,
+        discount_value: Number(vForm.discount_value),
+        min_purchase: Number(vForm.min_purchase || 0),
+        max_uses: Number(vForm.max_uses || 1),
+        expires_at: vForm.expires_at || null,
+      })
+      .select()
+      .single();
+    setCreatingVoucher(false);
+
+    if (error) {
+      setCreateVoucherError(
+        error.code === "23505" ? "Kode voucher ini sudah ada, pakai kode lain." : "Gagal membuat voucher: " + error.message
+      );
+      return;
+    }
+
+    setVouchers((prev) => [data, ...prev]);
+    setCreateVoucherSuccess(`Voucher "${data.code}" berhasil dibuat.`);
+    setVForm({ code: "", type: "electronic", discount_type: "percentage", discount_value: "", min_purchase: "", max_uses: "1", expires_at: "" });
+  }
+
+  async function toggleVoucherActive(v) {
+    const { error } = await supabase
+      .from("vouchers")
+      .update({ is_active: !v.is_active })
+      .eq("id", v.id);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setVouchers((prev) => prev.map((x) => (x.id === v.id ? { ...x, is_active: !x.is_active } : x)));
+  }
 
   useEffect(() => {
     if (!isAuthed) return;
@@ -235,20 +205,11 @@ function StaffAppInner() {
     async function loadReservations() {
       setLoadingReservations(true);
       setFetchError("");
-      let queryBuilder = supabase
+      const { data, error } = await supabase
         .from("reservations")
-        .select(
-          "id, booking_code, customer_name, customer_whatsapp, pax, outlet_id, reservation_date, session, status, payment_method, payment_status, total_amount, paid_amount, reservation_items(quantity, menus(name))"
-        )
+        .select("id, booking_code, customer_name, pax, outlet_id, reservation_date, session, status, reservation_items(quantity, menus(name))")
         .eq("reservation_date", dateFilter)
         .order("created_at", { ascending: true });
-
-      // Staff outlet spesifik (bukan manajer) cuma boleh lihat data outletnya sendiri
-      if (staffOutlet !== "all") {
-        queryBuilder = queryBuilder.eq("outlet_id", staffOutlet);
-      }
-
-      const { data, error } = await queryBuilder;
 
       if (cancelled) return;
       if (error) {
@@ -262,16 +223,10 @@ function StaffAppInner() {
           id: r.id,
           code: r.booking_code,
           name: r.customer_name,
-          wa: r.customer_whatsapp,
           pax: r.pax,
           outlet: r.outlet_id,
-          date: r.reservation_date,
           session: r.session,
           status: r.status,
-          paymentMethod: r.payment_method,
-          paymentStatus: r.payment_status,
-          totalAmount: r.total_amount,
-          paidAmount: r.paid_amount,
           menu: (r.reservation_items || [])
             .map((it) => `${it.menus?.name || "Menu"} ×${it.quantity}`)
             .join(", "),
@@ -281,18 +236,14 @@ function StaffAppInner() {
     }
     loadReservations();
     return () => { cancelled = true; };
-  }, [isAuthed, dateFilter, staffOutlet]);
+  }, [isAuthed, dateFilter]);
 
   function handleLogin(e) {
     e.preventDefault();
-    const matchedOutlet = STAFF_CODES[codeInput.trim().toUpperCase()];
-    if (matchedOutlet) {
+    if (codeInput.trim().toUpperCase() === STAFF_ACCESS_CODE) {
       try {
         sessionStorage.setItem("imperial_staff_authed", "true");
-        sessionStorage.setItem("imperial_staff_outlet", matchedOutlet);
       } catch {}
-      setStaffOutlet(matchedOutlet);
-      setOutletFilter(matchedOutlet === "all" ? "all" : matchedOutlet);
       setIsAuthed(true);
       setAuthError("");
     } else {
@@ -303,80 +254,9 @@ function StaffAppInner() {
   function handleLogout() {
     try {
       sessionStorage.removeItem("imperial_staff_authed");
-      sessionStorage.removeItem("imperial_staff_outlet");
     } catch {}
     setIsAuthed(false);
-    setStaffOutlet("all");
     setCodeInput("");
-  }
-
-  // Reset filter dashboard kembali ke kondisi awal (tanggal hari ini, tanpa
-  // pencarian/filter) tanpa perlu logout. Dipakai tombol "Kembali ke awal".
-  function resetDashboard() {
-    setDateFilter(todayISO());
-    setQuery("");
-    setStatusFilter("all");
-    setOutletFilter(staffOutlet === "all" ? "all" : staffOutlet);
-  }
-
-  // Export data reservasi yang sedang tampil (sesuai filter tanggal/pencarian/status/outlet
-  // aktif) ke file CSV yang bisa langsung dibuka di Excel/Google Sheets.
-  function exportCSV() {
-    if (filtered.length === 0) return;
-
-    const headers = [
-      "Kode Booking",
-      "Nama",
-      "WhatsApp",
-      "Outlet",
-      "Tanggal",
-      "Sesi",
-      "Jumlah Tamu",
-      "Menu",
-      "Status Kehadiran",
-      "Metode Bayar",
-      "Status Bayar",
-      "Total (Rp)",
-      "Dibayar (Rp)",
-    ];
-
-    function escapeCSV(val) {
-      const s = val === null || val === undefined ? "" : String(val);
-      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-        return '"' + s.replace(/"/g, '""') + '"';
-      }
-      return s;
-    }
-
-    const rows = filtered.map((r) => [
-      r.code,
-      r.name,
-      r.wa,
-      outlets.find((o) => o.id === r.outlet)?.name || r.outlet,
-      r.date,
-      r.session,
-      r.pax,
-      r.menu,
-      STATUS_META[r.status]?.label || r.status,
-      r.paymentMethod === "qris" ? "QRIS" : r.paymentMethod === "cash" ? "Tunai" : r.paymentMethod,
-      r.paymentStatus,
-      r.totalAmount,
-      r.paidAmount,
-    ]);
-
-    const csvContent =
-      [headers, ...rows].map((row) => row.map(escapeCSV).join(",")).join("\n");
-
-    // Tambahkan BOM supaya karakter (misal "×" di kolom menu) tampil benar saat dibuka di Excel
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `reservasi-imperial-${dateFilter}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   }
 
   const filtered = useMemo(() => {
@@ -466,9 +346,9 @@ function StaffAppInner() {
           </p>
           <a
             href="/"
-            className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-stone-400 hover:text-stone-600 underline underline-offset-2"
+            className="mt-3 text-[11px] text-stone-500 hover:text-emerald-800 flex items-center justify-center gap-1.5"
           >
-            <Home className="w-3 h-3" /> Kembali ke halaman awal
+            <Home className="w-3.5 h-3.5" /> Kembali ke halaman utama
           </a>
         </div>
       </div>
@@ -480,26 +360,24 @@ function StaffAppInner() {
       <style>{FONT_IMPORT}</style>
 
       <header className="bg-emerald-950 text-stone-50">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center shrink-0">
+        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center">
               <Moon className="w-4 h-4 text-emerald-950" fill="currentColor" />
               <Star className="w-2.5 h-2.5 text-emerald-950 absolute -top-0.5 -right-0.5" fill="currentColor" />
             </div>
-            <div className="min-w-0">
+            <div>
               <p className="text-lg leading-none" style={display}>Imperial Staff</p>
-              <p className="text-[11px] text-emerald-300 tracking-wide">
-                {staffOutlet === "all" ? "Dashboard reservasi hari ini · Semua outlet" : `Dashboard reservasi hari ini · ${outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}`}
-              </p>
+              <p className="text-[11px] text-emerald-300 tracking-wide">Dashboard reservasi hari ini</p>
             </div>
           </div>
           <p className="text-[11px] text-emerald-300 hidden sm:block">Ramadan &amp; Lebaran 2026</p>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
             <a
               href="/"
               className="text-[11px] text-emerald-300 hover:text-white flex items-center gap-1.5 border border-emerald-800 rounded-full px-3 py-1.5"
             >
-              <Home className="w-3.5 h-3.5" /> Kembali ke awal
+              <Home className="w-3.5 h-3.5" /> Halaman utama
             </a>
             <button
               onClick={handleLogout}
@@ -520,6 +398,23 @@ function StaffAppInner() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab("reservasi")}
+            className={"text-sm px-4 py-2 rounded-full font-medium transition-colors " + (activeTab === "reservasi" ? "bg-emerald-900 text-amber-300" : "bg-white border border-stone-200 text-stone-500 hover:border-stone-300")}
+          >
+            Reservasi
+          </button>
+          <button
+            onClick={() => setActiveTab("voucher")}
+            className={"text-sm px-4 py-2 rounded-full font-medium transition-colors flex items-center gap-1.5 " + (activeTab === "voucher" ? "bg-emerald-900 text-amber-300" : "bg-white border border-stone-200 text-stone-500 hover:border-stone-300")}
+          >
+            <Ticket className="w-3.5 h-3.5" /> Voucher
+          </button>
+        </div>
+
+        {activeTab === "reservasi" && (
+        <>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
           <StatCard label="Reservasi hari ini" value={totalToday} icon={Store} />
           <StatCard label="Sudah check-in" value={checkedInCount} sub={`dari ${totalToday} reservasi`} icon={CheckCircle2} />
@@ -546,40 +441,17 @@ function StaffAppInner() {
               className="w-full rounded-full border border-stone-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
-          {staffOutlet === "all" ? (
-            <select
-              value={outletFilter}
-              onChange={(e) => setOutletFilter(e.target.value)}
-              className="rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-            >
-              <option value="all">Semua outlet</option>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-          ) : (
-            <span
-              title="Akun ini terkunci ke satu outlet"
-              className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 font-medium flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <Store className="w-3.5 h-3.5" /> {outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}
-            </span>
-          )}
-          {(dateFilter !== todayISO() || query || statusFilter !== "all" || (staffOutlet === "all" && outletFilter !== "all")) && (
-            <button
-              onClick={resetDashboard}
-              className="text-xs font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50 hover:border-stone-300 transition-colors whitespace-nowrap"
-            >
-              Reset filter
-            </button>
-          )}
+          <select
+            value={outletFilter}
+            onChange={(e) => setOutletFilter(e.target.value)}
+            className="rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="all">Semua outlet</option>
+            {OUTLETS.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
         </div>
-
-        {staffOutlet !== "all" && (
-          <p className="text-[11px] text-stone-400 mb-4 -mt-2">
-            Akun ini cuma bisa melihat & mengelola reservasi outlet <strong>{outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}</strong>.
-          </p>
-        )}
 
         {loadingReservations && (
           <p className="text-xs text-stone-400 mb-4">Memuat reservasi...</p>
@@ -587,13 +459,8 @@ function StaffAppInner() {
         {fetchError && (
           <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-4">{fetchError}</p>
         )}
-        {outletsError && (
-          <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-4">
-            Daftar outlet belum lengkap: {outletsError}
-          </p>
-        )}
 
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <div className="flex items-center gap-2 mb-5">
           <Filter className="w-3.5 h-3.5 text-stone-400" />
           {["all", "pending", "checked-in", "no-show"].map((s) => (
             <button
@@ -609,18 +476,6 @@ function StaffAppInner() {
               {s === "all" ? "Semua" : STATUS_META[s].label}
             </button>
           ))}
-          <button
-            onClick={exportCSV}
-            disabled={filtered.length === 0}
-            className={
-              "ml-auto text-xs font-semibold px-4 py-1.5 rounded-full flex items-center gap-1.5 transition-colors " +
-              (filtered.length === 0
-                ? "bg-stone-100 text-stone-300 cursor-not-allowed"
-                : "bg-white border border-emerald-800 text-emerald-800 hover:bg-emerald-50")
-            }
-          >
-            <Download className="w-3.5 h-3.5" /> Export CSV ({filtered.length})
-          </button>
         </div>
 
         <div className="space-y-2.5">
@@ -644,7 +499,7 @@ function StaffAppInner() {
                       <span className="text-[11px] font-mono tracking-wide text-stone-400">{r.code}</span>
                     </div>
                     <p className="text-xs text-stone-500 truncate">
-                      {r.pax} orang · {outlets.find((o) => o.id === r.outlet)?.name || r.outlet} · {r.session}
+                      {r.pax} orang · {OUTLETS.find((o) => o.id === r.outlet)?.name} · {r.session}
                     </p>
                     <p className="text-[11px] text-stone-400">{r.menu}</p>
                   </div>
@@ -677,6 +532,146 @@ function StaffAppInner() {
             );
           })}
         </div>
+        </>
+        )}
+
+        {activeTab === "voucher" && (
+          <div>
+            <Card className="p-5 mb-6">
+              <p className="text-sm font-semibold text-emerald-950 mb-4 flex items-center gap-1.5">
+                <Plus className="w-4 h-4" /> Buat voucher baru
+              </p>
+              <form onSubmit={createVoucher} className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-600 mb-1.5">Kode voucher</label>
+                  <input
+                    value={vForm.code}
+                    onChange={(e) => setVForm({ ...vForm, code: e.target.value.toUpperCase() })}
+                    placeholder="LEBARAN25"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm tracking-wide focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-600 mb-1.5">Jenis voucher</label>
+                  <select
+                    value={vForm.type}
+                    onChange={(e) => setVForm({ ...vForm, type: e.target.value })}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="electronic">Elektronik (kode promo)</option>
+                    <option value="physical">Fisik (kupon kertas)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-600 mb-1.5">Tipe potongan</label>
+                  <select
+                    value={vForm.discount_type}
+                    onChange={(e) => setVForm({ ...vForm, discount_type: e.target.value })}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="percentage">Persen (%)</option>
+                    <option value="fixed">Nominal tetap (Rp)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-600 mb-1.5">
+                    Nilai potongan {vForm.discount_type === "percentage" ? "(0-100)" : "(Rp)"}
+                  </label>
+                  <input
+                    type="number"
+                    value={vForm.discount_value}
+                    onChange={(e) => setVForm({ ...vForm, discount_value: e.target.value })}
+                    placeholder={vForm.discount_type === "percentage" ? "10" : "50000"}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-600 mb-1.5">Minimal belanja (Rp)</label>
+                  <input
+                    type="number"
+                    value={vForm.min_purchase}
+                    onChange={(e) => setVForm({ ...vForm, min_purchase: e.target.value })}
+                    placeholder="0"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-600 mb-1.5">Maksimal pemakaian</label>
+                  <input
+                    type="number"
+                    value={vForm.max_uses}
+                    onChange={(e) => setVForm({ ...vForm, max_uses: e.target.value })}
+                    placeholder="1"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <p className="text-[10px] text-stone-400 mt-1">Voucher fisik biasanya 1, elektronik bisa ratusan.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-600 mb-1.5">Kedaluwarsa (opsional)</label>
+                  <input
+                    type="date"
+                    value={vForm.expires_at}
+                    onChange={(e) => setVForm({ ...vForm, expires_at: e.target.value })}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div className="sm:col-span-2 flex items-center gap-3 mt-1">
+                  <button
+                    type="submit"
+                    disabled={creatingVoucher}
+                    className="rounded-full px-6 py-2.5 text-sm font-semibold bg-emerald-900 text-amber-300 hover:bg-emerald-800 active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {creatingVoucher ? "Membuat..." : "Buat voucher"}
+                  </button>
+                  {createVoucherError && <p className="text-xs text-rose-500">{createVoucherError}</p>}
+                  {createVoucherSuccess && <p className="text-xs text-emerald-600">{createVoucherSuccess}</p>}
+                </div>
+              </form>
+            </Card>
+
+            <p className="text-sm font-semibold text-emerald-950 mb-3">Daftar voucher</p>
+            {loadingVouchers && <p className="text-xs text-stone-400 mb-3">Memuat voucher...</p>}
+            {voucherListError && <p className="text-xs text-rose-500 mb-3">{voucherListError}</p>}
+
+            <div className="space-y-2.5">
+              {!loadingVouchers && vouchers.length === 0 && (
+                <p className="text-sm text-stone-400 text-center py-10">Belum ada voucher. Buat yang pertama di atas.</p>
+              )}
+              {vouchers.map((v) => (
+                <div key={v.id} className="bg-white rounded-2xl border border-stone-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-emerald-950 text-sm font-mono tracking-wide">{v.code}</p>
+                      <span className="text-[10px] font-medium bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full">
+                        {v.type === "physical" ? "Fisik" : "Elektronik"}
+                      </span>
+                      {!v.is_active && (
+                        <span className="text-[10px] font-medium bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full">Nonaktif</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      Potongan {v.discount_type === "percentage" ? `${v.discount_value}%` : rupiah(v.discount_value)}
+                      {v.min_purchase > 0 && ` · min. belanja ${rupiah(v.min_purchase)}`}
+                      {v.expires_at && ` · berlaku s/d ${v.expires_at}`}
+                    </p>
+                    <p className="text-[11px] text-stone-400 mt-0.5">Terpakai {v.used_count} dari {v.max_uses}</p>
+                  </div>
+                  <button
+                    onClick={() => toggleVoucherActive(v)}
+                    className={
+                      "text-xs font-medium px-3 py-2 rounded-full border flex items-center gap-1.5 shrink-0 transition-all " +
+                      (v.is_active
+                        ? "border-stone-200 text-stone-500 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600"
+                        : "border-emerald-200 text-emerald-700 hover:bg-emerald-50")
+                    }
+                  >
+                    <Power className="w-3.5 h-3.5" /> {v.is_active ? "Nonaktifkan" : "Aktifkan"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
