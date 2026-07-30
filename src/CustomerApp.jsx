@@ -23,6 +23,7 @@ import {
   Sparkles,
   Banknote,
   Search,
+  Download,
 } from "lucide-react";
 
 const FONT_IMPORT =
@@ -32,9 +33,9 @@ const display = { fontFamily: "'Fraunces', serif" };
 const body = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
 const DEFAULT_OUTLETS = [
-  { id: "kemang", name: "Imperial Kemang", city: "Jakarta Selatan" },
-  { id: "bsd", name: "Imperial BSD", city: "Tangerang Selatan" },
-  { id: "pik", name: "Imperial PIK", city: "Jakarta Utara" },
+  { id: "kemang", name: "Imperial Kemang", city: "Jakarta Selatan", daily_capacity: 30 },
+  { id: "bsd", name: "Imperial BSD", city: "Tangerang Selatan", daily_capacity: 30 },
+  { id: "pik", name: "Imperial PIK", city: "Jakarta Utara", daily_capacity: 30 },
 ];
 
 const MENUS = [
@@ -58,8 +59,17 @@ const MONTHS = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
-const SESSIONS = ["17:30 — Buka Puasa", "19:00 — Malam"];
-const SESSION_CAPACITY = 7 // maksimal reservasi per sesi, sesuaikan dengan kapasitas outlet Anda
+// Jam operasional untuk pemilihan waktu bebas oleh pelanggan.
+// Ganti dua nilai ini kalau jam buka/tutup outlet berubah.
+const OPENING_TIME = "16:30";
+const CLOSING_TIME = "21:00";
+// Pilihan jam cepat yang ditampilkan sebagai tombol (opsional, pelanggan tetap
+// bisa isi jam lain sendiri lewat input di bawahnya).
+const QUICK_TIMES = ["17:30", "18:00", "18:30", "19:00", "19:30", "20:00"];
+// Kapasitas total reservasi per HARI (bukan per sesi lagi, karena jam sekarang bebas).
+// Kapasitas cadangan kalau outlet tidak punya nilai daily_capacity di database
+// (kapasitas sebenarnya sekarang diambil per outlet, lihat outlets.daily_capacity)
+const FALLBACK_DAILY_CAPACITY = 30;
 
 function rupiah(n) {
   return "Rp" + n.toLocaleString("id-ID");
@@ -190,7 +200,7 @@ function CustomerAppInner() {
     async function loadOutlets() {
       const { data, error } = await supabase
         .from("outlets")
-        .select("id, name, city")
+        .select("id, name, city, daily_capacity")
         .order("city", { ascending: true });
       if (cancelled) return;
       if (error) {
@@ -243,6 +253,10 @@ function CustomerAppInner() {
   function outletName(id) {
     return outlets.find((o) => o.id === id)?.name;
   }
+
+  // Kapasitas reservasi harian untuk outlet yang sedang dipilih pelanggan.
+  // Kalau outlet belum punya nilai daily_capacity di database, pakai fallback.
+  const dailyCapacity = outlets.find((o) => o.id === outlet)?.daily_capacity || FALLBACK_DAILY_CAPACITY;
 
   // Ambil jumlah reservasi yang sudah ada untuk outlet & bulan yang sedang dilihat,
   // supaya kalender bisa menandai tanggal/sesi yang sudah penuh berdasarkan data asli.
@@ -317,16 +331,10 @@ function CustomerAppInner() {
 
   function dayStatus(monthIdx, day) {
     const counts = availability[dateKeyOf(monthIdx, day)] || {};
-    const total = SESSIONS.reduce((sum, s) => sum + (counts[s] || 0), 0);
-    const maxTotal = SESSION_CAPACITY * SESSIONS.length;
-    if (total >= maxTotal) return "penuh";
-    if (total >= maxTotal * 0.7) return "terbatas";
+    const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
+    if (total >= dailyCapacity) return "penuh";
+    if (total >= dailyCapacity * 0.7) return "terbatas";
     return "tersedia";
-  }
-
-  function sessionFull(monthIdx, day, s) {
-    const counts = availability[dateKeyOf(monthIdx, day)] || {};
-    return (counts[s] || 0) >= SESSION_CAPACITY;
   }
 
   const total = useMemo(
@@ -408,6 +416,80 @@ function CustomerAppInner() {
     setVoucherInput("");
     setVoucherApplied(null);
     setVoucherError("");
+  }
+
+  // Generate gambar (PNG) berisi kode booking + detail reservasi, lalu unduh.
+  // Dipakai tombol "Download kode booking" di halaman konfirmasi (Langkah 6),
+  // supaya pelanggan bisa simpan/tunjukkan tanpa perlu buka aplikasi/internet lagi.
+  function downloadBookingCard() {
+    if (!bookingCode) return;
+
+    const canvas = document.createElement("canvas");
+    const W = 640;
+    const H = 380;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+
+    // background kartu
+    ctx.fillStyle = "#FAF8F3";
+    ctx.fillRect(0, 0, W, H);
+
+    // header hijau
+    ctx.fillStyle = "#052e1f";
+    ctx.fillRect(0, 0, W, 72);
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.arc(36, 36, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#052e1f";
+    ctx.font = "bold 16px 'Plus Jakarta Sans', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("☾", 36, 42);
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fef3c7";
+    ctx.font = "bold 22px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText("Imperial Reservation", 64, 44);
+
+    // label "KODE BOOKING"
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#a8a29e";
+    ctx.font = "12px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText("KODE BOOKING", W / 2, 130);
+
+    // kode booking besar
+    ctx.fillStyle = "#065f46";
+    ctx.font = "bold 46px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText(bookingCode, W / 2, 180);
+
+    // garis pemisah
+    ctx.strokeStyle = "#e7e5e4";
+    ctx.beginPath();
+    ctx.moveTo(80, 210);
+    ctx.lineTo(W - 80, 210);
+    ctx.stroke();
+
+    // detail reservasi
+    ctx.fillStyle = "#1c1917";
+    ctx.font = "600 16px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText(outletName(outlet) || "-", W / 2, 246);
+
+    ctx.fillStyle = "#57534e";
+    ctx.font = "14px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText(`${selectedDate} ${MONTHS[monthIndex]} 2026 · ${session || "-"}`, W / 2, 270);
+    ctx.fillText(`Atas nama: ${form.name || "-"} · ${form.pax || "-"} orang`, W / 2, 292);
+
+    // footer note
+    ctx.fillStyle = "#a8a29e";
+    ctx.font = "12px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText("Tunjukkan kode ini ke staff saat tiba di outlet", W / 2, 340);
+
+    const link = document.createElement("a");
+    link.download = `booking-${bookingCode}.png`;
+    link.href = canvas.toDataURL("image/png");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   function handlePickDate(d) {
@@ -695,10 +777,11 @@ function CustomerAppInner() {
           <div>
             <p className="text-xs tracking-[0.15em] text-amber-600 font-semibold mb-2" style={body}>LANGKAH 3</p>
             <h1 className="text-3xl text-emerald-950 mb-2" style={display}>Cek ketersediaan slot</h1>
-            <p className="text-stone-500 text-sm mb-6">
+            <p className="text-stone-500 text-sm mb-1">
               Pilih tanggal dan sesi. Tanggal penuh akan otomatis ditandai.
               {loadingAvailability && <span className="text-amber-600"> · Memuat ketersediaan...</span>}
             </p>
+            <p className="text-[11px] text-stone-400 mb-6">Kuota reservasi {outletName(outlet) || "outlet ini"}: maksimal {dailyCapacity} reservasi/hari.</p>
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <button onClick={() => { setMonthIndex((m) => Math.max(0, m - 1)); setSelectedDate(null); }} className="w-8 h-8 rounded-full hover:bg-stone-100 flex items-center justify-center"><ChevronLeft className="w-4 h-4 text-stone-500" /></button>
@@ -740,28 +823,37 @@ function CustomerAppInner() {
             {selectedDate && selectedStatus !== "penuh" && (
               <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
                 <p className="text-sm text-emerald-800 flex items-center gap-2 mb-3 font-medium"><Check className="w-4 h-4" /> {selectedDate} {MONTHS[monthIndex]} 2026 masih tersedia</p>
-                <div className="flex gap-2 flex-wrap">
-                  {SESSIONS.map((s) => {
-                    const full = sessionFull(monthIndex, selectedDate, s);
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => !full && setSession(s)}
-                        disabled={full}
-                        className={
-                          "text-xs px-3 py-2 rounded-full border font-medium transition-colors " +
-                          (full
-                            ? "bg-stone-50 text-stone-300 border-stone-200 cursor-not-allowed line-through"
-                            : session === s
-                            ? "bg-emerald-800 text-white border-emerald-800"
-                            : "bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50")
-                        }
-                      >
-                        {s}{full ? " · Penuh" : ""}
-                      </button>
-                    );
-                  })}
+
+                <p className="text-[11px] text-emerald-700 font-medium mb-2">Pilih jam cepat</p>
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {QUICK_TIMES.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setSession(t)}
+                      className={
+                        "text-xs px-3 py-2 rounded-full border font-medium transition-colors " +
+                        (session === t
+                          ? "bg-emerald-800 text-white border-emerald-800"
+                          : "bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50")
+                      }
+                    >
+                      {t}
+                    </button>
+                  ))}
                 </div>
+
+                <p className="text-[11px] text-emerald-700 font-medium mb-1.5">Atau isi jam sendiri ({OPENING_TIME} — {CLOSING_TIME})</p>
+                <input
+                  type="time"
+                  value={QUICK_TIMES.includes(session) ? "" : session || ""}
+                  min={OPENING_TIME}
+                  max={CLOSING_TIME}
+                  onChange={(e) => setSession(e.target.value)}
+                  className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <p className="text-[11px] text-emerald-600 mt-2">
+                  {session ? <>Jam dipilih: <strong>{session}</strong></> : "Belum ada jam yang dipilih."}
+                </p>
               </div>
             )}
             <div className="flex gap-3 mt-8">
@@ -912,8 +1004,16 @@ function CustomerAppInner() {
               </Card>
 
               <button
+                onClick={downloadBookingCard}
+                className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold bg-emerald-900 text-amber-300 hover:bg-emerald-800 active:scale-[0.98] transition-all"
+                style={body}
+              >
+                <Download className="w-4 h-4" /> Download kode booking
+              </button>
+
+              <button
                 onClick={resetBooking}
-                className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold border border-emerald-800 text-emerald-800 hover:bg-emerald-50 transition-colors"
+                className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold border border-emerald-800 text-emerald-800 hover:bg-emerald-50 transition-colors"
                 style={body}
               >
                 <Store className="w-4 h-4" /> Kembali ke tampilan awal
