@@ -19,6 +19,7 @@ import {
   Plus,
   Power,
   Home,
+  Download,
 } from "lucide-react";
 
 const FONT_IMPORT =
@@ -29,9 +30,82 @@ const body = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
 // Kode akses staff. Untuk penggunaan nyata, sebaiknya diverifikasi lewat
 // backend/API, bukan disimpan langsung di kode frontend seperti ini.
-const STAFF_ACCESS_CODE = "IMP2026";
+//
+// "IMP2026" tetap jadi kode MANAJER — bisa lihat & kelola semua outlet.
+// Kode lain di bawah cuma bisa lihat & kelola outlet miliknya sendiri.
+// Mau tambah kode untuk outlet lain? Tambahkan baris baru di sini,
+// formatnya: "KODE_RAHASIA": "id_outlet" (id_outlet harus sama persis
+// dengan id di tabel `outlets` Supabase).
+const STAFF_CODES = {
+IMP2026: "all",
+KEMANG2026: "kemang",
+BSD2026: "bsd",
+PIK2026: "pik",
+KEMANGRAYA2026: "kemang2",
+SENAYANCITY2026: "senayan",
+KUNINGAN2026: "kuningan",
+CIPETE2026: "cipete",
+PONDOKINDAH2026: "pondokindah",
+SUDIRMAN2026: "sudirman",
+MENTENG2026: "menteng",
+THAMRIN2026: "thamrin",
+GAMBIR2026: "gambir",
+KELAPAGADING2026: "kelapagading",
+PANTAIINDAH2026: "pantaiindah",
+SUNTER2026: "sunterr",
+CAKUNG2026: "cakung",
+RAWAMANGUN2026: "rawamangun",
+CIBUBUR2026: "cibubur",
+KALIMALANG2026: "kalimalang",
+CILEDUG2026: "ciledug",
+KEBONJERUK2026: "kebonjeruk",
+GROGOL2026: "grogol",
+PURIINDAH2026: "puriindah",
+SERPONG2026: "serpong",
+ALAMSUTERA2026: "alamsutera",
+BINTARO2026: "bintaro",
+GADINGSERPONG2026: "gadingserpong",
+CIKOKOL2026: "cikokol",
+KARAWACI2026: "karawaci",
+BEKASIBARAT2026: "bekasibarat",
+SUMMARECON2026: "summarecon",
+CIKARANG2026: "cikarang",
+DEPOKTOWN2026: "depoktown",
+MARGONDA2026: "margonda",
+PAJAJARAN2026: "bogorpajajaran",
+BOGORBARU2026: "bogorbaru",
+DAGO2026: "dagoo",
+RIAU2026: "bandungriau",
+PASTEUR2026: "bandungpaskal",
+CIHAMPELAS2026: "cihampelas",
+SIMPANGLIMA2026: "semarangsimpang",
+TEMBALANG2026: "semarangtembalang",
+MALIOBORO2026: "jogjamalioboro",
+SUDIRMANJOGJA2026: "jogjasudirman",
+KARTASURA2026: "solokartasura",
+DARMO2026: "surabayadarmo",
+HRMUHAMMAD2026: "surabayahr",
+RUNGKUT2026: "surabayarungkut",
+IJEN2026: "malangijen",
+SOEKARNOHATTA2026: "malangsoekarnohatta",
+SIDOARJO2026: "sidoarjo",
+POLONIA2026: "medanpolonia",
+GATOTSUBROTO2026: "medangatotsubroto",
+SUDIRMANPALEMBANG2026: "palembangsudirman",
+PANAKKUKANG2026: "makassarpanakkukang",
+PETTARANI2026: "makassarpettarani",
+DENPASAR2026: "balidenpasar",
+SEMINYAK2026: "baliseminyak",
+SANUR2026: "balisanur",
+BALIKPAPAN2026: "balikpapan",
+PONTIANAK2026: "pontianak",
+MANADO2026: "manado",
+RAJABASA2026: "lampungrajabasa",
+SUDIRMANPEKANBARU2026: "pekanbarusudirman",
+};
 
-const OUTLETS = [
+
+const DEFAULT_OUTLETS = [
   { id: "kemang", name: "Imperial Kemang" },
   { id: "bsd", name: "Imperial BSD" },
   { id: "pik", name: "Imperial PIK" },
@@ -97,8 +171,20 @@ function StaffAppInner() {
       return false;
     }
   });
+  // "all" = manajer (bisa lihat semua outlet), selain itu = id outlet spesifik
+  // yang cuma boleh dikelola staff itu sendiri.
+  const [staffOutlet, setStaffOutlet] = useState(() => {
+    try {
+      return sessionStorage.getItem("imperial_staff_outlet") || "all";
+    } catch {
+      return "all";
+    }
+  });
   const [codeInput, setCodeInput] = useState("");
   const [authError, setAuthError] = useState("");
+
+  const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
+  const [outletsError, setOutletsError] = useState("");
 
   const [reservations, setReservations] = useState([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
@@ -109,6 +195,14 @@ function StaffAppInner() {
   const [outletFilter, setOutletFilter] = useState("all");
 
   const [activeTab, setActiveTab] = useState("reservasi"); // 'reservasi' | 'voucher'
+
+  // Proteksi tambahan: kalau staffOutlet bukan "all" (bukan manajer) tapi activeTab
+  // kepilih "voucher" (misal dari state lama sebelum ganti akun), paksa balik ke reservasi.
+  useEffect(() => {
+    if (staffOutlet !== "all" && activeTab === "voucher") {
+      setActiveTab("reservasi");
+    }
+  }, [staffOutlet, activeTab]);
 
   const [vouchers, setVouchers] = useState([]);
   const [loadingVouchers, setLoadingVouchers] = useState(false);
@@ -127,7 +221,7 @@ function StaffAppInner() {
   const [createVoucherSuccess, setCreateVoucherSuccess] = useState("");
 
   useEffect(() => {
-    if (!isAuthed || activeTab !== "voucher") return;
+    if (!isAuthed || activeTab !== "voucher" || staffOutlet !== "all") return;
     let cancelled = false;
     async function loadVouchers() {
       setLoadingVouchers(true);
@@ -147,7 +241,7 @@ function StaffAppInner() {
     }
     loadVouchers();
     return () => { cancelled = true; };
-  }, [isAuthed, activeTab]);
+  }, [isAuthed, activeTab, staffOutlet]);
 
   async function createVoucher(e) {
     e.preventDefault();
@@ -199,17 +293,47 @@ function StaffAppInner() {
     setVouchers((prev) => prev.map((x) => (x.id === v.id ? { ...x, is_active: !x.is_active } : x)));
   }
 
+  // Ambil daftar outlet dari database, supaya dropdown filter selalu lengkap
+  // begitu ada outlet baru ditambahkan lewat Supabase.
+  useEffect(() => {
+    if (!isAuthed) return;
+    let cancelled = false;
+    async function loadOutlets() {
+      const { data, error } = await supabase
+        .from("outlets")
+        .select("id, name, city")
+        .order("city", { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        console.error("Gagal memuat outlet:", error);
+        setOutletsError(error.message || "Gagal memuat outlet dari database.");
+      } else if (data && data.length > 0) {
+        setOutlets(data);
+        setOutletsError("");
+      }
+    }
+    loadOutlets();
+    return () => { cancelled = true; };
+  }, [isAuthed]);
+
   useEffect(() => {
     if (!isAuthed) return;
     let cancelled = false;
     async function loadReservations() {
       setLoadingReservations(true);
       setFetchError("");
-      const { data, error } = await supabase
+      let queryBuilder = supabase
         .from("reservations")
-        .select("id, booking_code, customer_name, pax, outlet_id, reservation_date, session, status, reservation_items(quantity, menus(name))")
+        .select("id, booking_code, customer_name, customer_whatsapp, pax, outlet_id, reservation_date, session, status, payment_method, payment_status, total_amount, paid_amount, reservation_items(quantity, menus(name))")
         .eq("reservation_date", dateFilter)
         .order("created_at", { ascending: true });
+
+      // Staff outlet spesifik (bukan manajer) cuma boleh lihat data outletnya sendiri
+      if (staffOutlet !== "all") {
+        queryBuilder = queryBuilder.eq("outlet_id", staffOutlet);
+      }
+
+      const { data, error } = await queryBuilder;
 
       if (cancelled) return;
       if (error) {
@@ -223,10 +347,16 @@ function StaffAppInner() {
           id: r.id,
           code: r.booking_code,
           name: r.customer_name,
+          wa: r.customer_whatsapp,
           pax: r.pax,
           outlet: r.outlet_id,
+          date: r.reservation_date,
           session: r.session,
           status: r.status,
+          paymentMethod: r.payment_method,
+          paymentStatus: r.payment_status,
+          totalAmount: r.total_amount,
+          paidAmount: r.paid_amount,
           menu: (r.reservation_items || [])
             .map((it) => `${it.menus?.name || "Menu"} ×${it.quantity}`)
             .join(", "),
@@ -236,14 +366,18 @@ function StaffAppInner() {
     }
     loadReservations();
     return () => { cancelled = true; };
-  }, [isAuthed, dateFilter]);
+  }, [isAuthed, dateFilter, staffOutlet]);
 
   function handleLogin(e) {
     e.preventDefault();
-    if (codeInput.trim().toUpperCase() === STAFF_ACCESS_CODE) {
+    const matchedOutlet = STAFF_CODES[codeInput.trim().toUpperCase()];
+    if (matchedOutlet) {
       try {
         sessionStorage.setItem("imperial_staff_authed", "true");
+        sessionStorage.setItem("imperial_staff_outlet", matchedOutlet);
       } catch {}
+      setStaffOutlet(matchedOutlet);
+      setOutletFilter(matchedOutlet === "all" ? "all" : matchedOutlet);
       setIsAuthed(true);
       setAuthError("");
     } else {
@@ -254,9 +388,50 @@ function StaffAppInner() {
   function handleLogout() {
     try {
       sessionStorage.removeItem("imperial_staff_authed");
+      sessionStorage.removeItem("imperial_staff_outlet");
     } catch {}
     setIsAuthed(false);
+    setStaffOutlet("all");
     setCodeInput("");
+  }
+
+  // Reset filter dashboard kembali ke kondisi awal tanpa perlu logout.
+  function resetDashboard() {
+    setDateFilter(todayISO());
+    setQuery("");
+    setStatusFilter("all");
+    setOutletFilter(staffOutlet === "all" ? "all" : staffOutlet);
+  }
+
+  // Export data reservasi yang sedang tampil (sesuai filter aktif) ke CSV.
+  function exportCSV() {
+    if (filtered.length === 0) return;
+    const headers = ["Kode Booking", "Nama", "WhatsApp", "Outlet", "Tanggal", "Sesi", "Jumlah Tamu", "Menu", "Status Kehadiran", "Metode Bayar", "Status Bayar", "Total (Rp)", "Dibayar (Rp)"];
+    function escapeCSV(val) {
+      const s = val === null || val === undefined ? "" : String(val);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+    const rows = filtered.map((r) => [
+      r.code, r.name, r.wa,
+      outlets.find((o) => o.id === r.outlet)?.name || r.outlet,
+      r.date, r.session, r.pax, r.menu,
+      STATUS_META[r.status]?.label || r.status,
+      r.paymentMethod === "qris" ? "QRIS" : r.paymentMethod === "cash" ? "Tunai" : r.paymentMethod,
+      r.paymentStatus, r.totalAmount, r.paidAmount,
+    ]);
+    const csvContent = [headers, ...rows].map((row) => row.map(escapeCSV).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reservasi-imperial-${dateFilter}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   const filtered = useMemo(() => {
@@ -368,7 +543,9 @@ function StaffAppInner() {
             </div>
             <div>
               <p className="text-lg leading-none" style={display}>Imperial Staff</p>
-              <p className="text-[11px] text-emerald-300 tracking-wide">Dashboard reservasi hari ini</p>
+              <p className="text-[11px] text-emerald-300 tracking-wide">
+                {staffOutlet === "all" ? "Dashboard reservasi hari ini · Semua outlet" : `Dashboard reservasi hari ini · ${outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}`}
+              </p>
             </div>
           </div>
           <p className="text-[11px] text-emerald-300 hidden sm:block">Ramadan &amp; Lebaran 2026</p>
@@ -405,12 +582,14 @@ function StaffAppInner() {
           >
             Reservasi
           </button>
-          <button
-            onClick={() => setActiveTab("voucher")}
-            className={"text-sm px-4 py-2 rounded-full font-medium transition-colors flex items-center gap-1.5 " + (activeTab === "voucher" ? "bg-emerald-900 text-amber-300" : "bg-white border border-stone-200 text-stone-500 hover:border-stone-300")}
-          >
-            <Ticket className="w-3.5 h-3.5" /> Voucher
-          </button>
+          {staffOutlet === "all" && (
+            <button
+              onClick={() => setActiveTab("voucher")}
+              className={"text-sm px-4 py-2 rounded-full font-medium transition-colors flex items-center gap-1.5 " + (activeTab === "voucher" ? "bg-emerald-900 text-amber-300" : "bg-white border border-stone-200 text-stone-500 hover:border-stone-300")}
+            >
+              <Ticket className="w-3.5 h-3.5" /> Voucher
+            </button>
+          )}
         </div>
 
         {activeTab === "reservasi" && (
@@ -441,17 +620,45 @@ function StaffAppInner() {
               className="w-full rounded-full border border-stone-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
-          <select
-            value={outletFilter}
-            onChange={(e) => setOutletFilter(e.target.value)}
-            className="rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-          >
-            <option value="all">Semua outlet</option>
-            {OUTLETS.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
-            ))}
-          </select>
+          {staffOutlet === "all" ? (
+            <select
+              value={outletFilter}
+              onChange={(e) => setOutletFilter(e.target.value)}
+              className="rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <option value="all">Semua outlet</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              title="Akun ini terkunci ke satu outlet"
+              className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 font-medium flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Store className="w-3.5 h-3.5" /> {outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}
+            </span>
+          )}
+          {(dateFilter !== todayISO() || query || statusFilter !== "all" || (staffOutlet === "all" && outletFilter !== "all")) && (
+            <button
+              onClick={resetDashboard}
+              className="text-xs font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50 hover:border-stone-300 transition-colors whitespace-nowrap"
+            >
+              Reset filter
+            </button>
+          )}
         </div>
+
+        {staffOutlet !== "all" && (
+          <p className="text-[11px] text-stone-400 mb-4">
+            Akun ini cuma bisa melihat & mengelola reservasi outlet <strong>{outlets.find((o) => o.id === staffOutlet)?.name || staffOutlet}</strong>.
+          </p>
+        )}
+        {outletsError && (
+          <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-4">
+            Daftar outlet belum lengkap: {outletsError}
+          </p>
+        )}
 
         {loadingReservations && (
           <p className="text-xs text-stone-400 mb-4">Memuat reservasi...</p>
@@ -460,7 +667,7 @@ function StaffAppInner() {
           <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-4">{fetchError}</p>
         )}
 
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
           <Filter className="w-3.5 h-3.5 text-stone-400" />
           {["all", "pending", "checked-in", "no-show"].map((s) => (
             <button
@@ -476,6 +683,18 @@ function StaffAppInner() {
               {s === "all" ? "Semua" : STATUS_META[s].label}
             </button>
           ))}
+          <button
+            onClick={exportCSV}
+            disabled={filtered.length === 0}
+            className={
+              "ml-auto text-xs font-semibold px-4 py-1.5 rounded-full flex items-center gap-1.5 transition-colors " +
+              (filtered.length === 0
+                ? "bg-stone-100 text-stone-300 cursor-not-allowed"
+                : "bg-white border border-emerald-800 text-emerald-800 hover:bg-emerald-50")
+            }
+          >
+            <Download className="w-3.5 h-3.5" /> Export CSV ({filtered.length})
+          </button>
         </div>
 
         <div className="space-y-2.5">
@@ -499,7 +718,7 @@ function StaffAppInner() {
                       <span className="text-[11px] font-mono tracking-wide text-stone-400">{r.code}</span>
                     </div>
                     <p className="text-xs text-stone-500 truncate">
-                      {r.pax} orang · {OUTLETS.find((o) => o.id === r.outlet)?.name} · {r.session}
+                      {r.pax} orang · {outlets.find((o) => o.id === r.outlet)?.name || r.outlet} · {r.session}
                     </p>
                     <p className="text-[11px] text-stone-400">{r.menu}</p>
                   </div>
@@ -535,7 +754,7 @@ function StaffAppInner() {
         </>
         )}
 
-        {activeTab === "voucher" && (
+        {activeTab === "voucher" && staffOutlet === "all" && (
           <div>
             <Card className="p-5 mb-6">
               <p className="text-sm font-semibold text-emerald-950 mb-4 flex items-center gap-1.5">
